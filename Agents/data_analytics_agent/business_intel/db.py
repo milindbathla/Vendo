@@ -78,6 +78,8 @@ def get_ro_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
             Path(__file__).resolve().parent.parent / "data" / "demo.db",
             Path(__file__).resolve().parent.parent.parent / "data" / "demo.db",
             Path(__file__).resolve().parent.parent.parent / "demo_data" / "demo.db",
+            Path(__file__).resolve().parent.parent.parent.parent / "data" / "demo.db",
+            Path(__file__).resolve().parent.parent.parent.parent / "demo_data" / "demo.db",
         ]:
             if candidate.exists():
                 path = str(candidate)
@@ -105,6 +107,8 @@ def get_rw_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
             Path(__file__).resolve().parent.parent / "data" / "demo.db",
             Path(__file__).resolve().parent.parent.parent / "data" / "demo.db",
             Path(__file__).resolve().parent.parent.parent / "demo_data" / "demo.db",
+            Path(__file__).resolve().parent.parent.parent.parent / "data" / "demo.db",
+            Path(__file__).resolve().parent.parent.parent.parent / "demo_data" / "demo.db",
         ]:
             if candidate.exists():
                 path = str(candidate)
