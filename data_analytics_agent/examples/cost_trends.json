@@ -1,0 +1,264 @@
+{
+  "ok": true,
+  "data": {
+    "window_days": 90,
+    "cutoff_date": "2026-07-12",
+    "as_of_date": "2026-10-10",
+    "total_items_analyzed": 9,
+    "rising_items_count": 0,
+    "total_passthrough_per_tiffin": 0.0,
+    "top_rising_cost_drivers": [],
+    "all_items_trends": [
+      {
+        "item_id": "OIL-SUN-1L",
+        "item_name": "Refined sunflower oil",
+        "unit": "L",
+        "procure_mode": "catalogue",
+        "bom_qty": 0.06,
+        "first_date": "2026-07-12",
+        "first_price": 143.81,
+        "last_date": "2026-10-01",
+        "last_price": 148.0,
+        "absolute_change": 4.19,
+        "pct_change": 2.91,
+        "min_price": 140.0,
+        "max_price": 161.95,
+        "avg_price": 151.35,
+        "observation_count": 22,
+        "margin_impact_per_tiffin": 0.2514,
+        "is_rising": 0
+      },
+      {
+        "item_id": "RICE-BAS",
+        "item_name": "Rice",
+        "unit": "kg",
+        "procure_mode": "catalogue",
+        "bom_qty": 0.15,
+        "first_date": "2026-07-12",
+        "first_price": 64.03,
+        "last_date": "2026-10-06",
+        "last_price": 65.0,
+        "absolute_change": 0.97,
+        "pct_change": 1.51,
+        "min_price": 64.03,
+        "max_price": 66.62,
+        "avg_price": 65.22,
+        "observation_count": 13,
+        "margin_impact_per_tiffin": 0.1455,
+        "is_rising": 0
+      },
+      {
+        "item_id": "DAL-MOONG",
+        "item_name": "Moong dal",
+        "unit": "kg",
+        "procure_mode": "catalogue",
+        "bom_qty": 0.08,
+        "first_date": "2026-07-12",
+        "first_price": 110.32,
+        "last_date": "2026-10-04",
+        "last_price": 112.0,
+        "absolute_change": 1.68,
+        "pct_change": 1.52,
+        "min_price": 110.32,
+        "max_price": 131.2,
+        "avg_price": 118.19,
+        "observation_count": 25,
+        "margin_impact_per_tiffin": 0.1344,
+        "is_rising": 0
+      },
+      {
+        "item_id": "ATTA-10",
+        "item_name": "Wheat flour",
+        "unit": "kg",
+        "procure_mode": "catalogue",
+        "bom_qty": 0.2,
+        "first_date": "2026-07-12",
+        "first_price": 39.4,
+        "last_date": "2026-10-03",
+        "last_price": 40.0,
+        "absolute_change": 0.6,
+        "pct_change": 1.52,
+        "min_price": 39.4,
+        "max_price": 47.15,
+        "avg_price": 42.89,
+        "observation_count": 20,
+        "margin_impact_per_tiffin": 0.12,
+        "is_rising": 0
+      },
+      {
+        "item_id": "CONT-750",
+        "item_name": "Tiffin container 750ml",
+        "unit": "pcs",
+        "procure_mode": "catalogue",
+        "bom_qty": 1.0,
+        "first_date": "2026-07-12",
+        "first_price": 3.15,
+        "last_date": "2026-10-05",
+        "last_price": 3.2,
+        "absolute_change": 0.05,
+        "pct_change": 1.59,
+        "min_price": 3.15,
+        "max_price": 7.71,
+        "avg_price": 4.84,
+        "observation_count": 24,
+        "margin_impact_per_tiffin": 0.05,
+        "is_rising": 0
+      },
+      {
+        "item_id": "SPICE-MIX",
+        "item_name": "Spice blend",
+        "unit": "kg",
+        "procure_mode": "catalogue",
+        "bom_qty": 0.01,
+        "first_date": "2026-07-12",
+        "first_price": 275.8,
+        "last_date": "2026-10-01",
+        "last_price": 280.0,
+        "absolute_change": 4.2,
+        "pct_change": 1.52,
+        "min_price": 275.8,
+        "max_price": 287.0,
+        "avg_price": 281.26,
+        "observation_count": 10,
+        "margin_impact_per_tiffin": 0.042,
+        "is_rising": 0
+      },
+      {
+        "item_id": "BAG-CARRY",
+        "item_name": "Carry bag",
+        "unit": "pcs",
+        "procure_mode": "catalogue",
+        "bom_qty": 1.0,
+        "first_date": "2026-07-12",
+        "first_price": 1.18,
+        "last_date": "2026-10-02",
+        "last_price": 1.2,
+        "absolute_change": 0.02,
+        "pct_change": 1.69,
+        "min_price": 1.18,
+        "max_price": 1.23,
+        "avg_price": 1.2,
+        "observation_count": 10,
+        "margin_impact_per_tiffin": 0.02,
+        "is_rising": 0
+      },
+      {
+        "item_id": "GHEE-1KG",
+        "item_name": "Ghee (NOT in BOM)",
+        "unit": "kg",
+        "procure_mode": "catalogue",
+        "bom_qty": 0.0,
+        "first_date": "2026-07-12",
+        "first_price": 571.3,
+        "last_date": "2026-09-30",
+        "last_price": 594.5,
+        "absolute_change": 23.2,
+        "pct_change": 4.06,
+        "min_price": 571.3,
+        "max_price": 594.5,
+        "avg_price": 582.61,
+        "observation_count": 10,
+        "margin_impact_per_tiffin": 0.0,
+        "is_rising": 0
+      },
+      {
+        "item_id": "VEG-MIX",
+        "item_name": "Seasonal vegetables",
+        "unit": "kg",
+        "procure_mode": "daily_mandi",
+        "bom_qty": 0.25,
+        "first_date": "2026-07-12",
+        "first_price": 36.56,
+        "last_date": "2026-10-09",
+        "last_price": 32.0,
+        "absolute_change": -4.56,
+        "pct_change": -12.47,
+        "min_price": 32.0,
+        "max_price": 37.98,
+        "avg_price": 35.09,
+        "observation_count": 90,
+        "margin_impact_per_tiffin": -1.14,
+        "is_rising": 0
+      }
+    ],
+    "monthly_cogs_trend": [
+      {
+        "month": "2025-10",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2025-11",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2025-12",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2026-01",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2026-02",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2026-03",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2026-04",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2026-05",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2026-06",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2026-07",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2026-08",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2026-09",
+        "cogs_pct": 48.0,
+        "daily_opex": 640.0
+      },
+      {
+        "month": "2026-10",
+        "cogs_pct": 47.8,
+        "daily_opex": 212.81
+      }
+    ],
+    "speech_summary": "Over the last 90 days, prices remained stable. Rising supplier prices added Rs 0.00 per tiffin in production cost."
+  },
+  "confidence": 1.0,
+  "source": "db",
+  "warnings": [],
+  "error": null,
+  "meta": {
+    "tool": "analyze_cost_trends",
+    "as_of": "2026-10-10T19:10:00+05:30",
+    "period_resolved": "2026-07-12..2026-10-10",
+    "latency_ms": 0.98,
+    "queries": 2
+  }
+}

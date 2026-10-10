@@ -1,0 +1,95 @@
+{
+  "document_metadata": {
+    "doc_id": "INV-PKG-0245",
+    "doc_type": "tax_invoice",
+    "file_name": "INV-PKG-0245.pdf",
+    "extraction_engine": "amazon_textract_invoice_analyzer_v2",
+    "extraction_timestamp": "2026-10-05T16:45:00+05:30",
+    "extraction_confidence": 0.93,
+    "authenticity_note": "Extraction confidence only; document authenticity requires bank/portal validation"
+  },
+  "invoice_details": {
+    "invoice_number": "INV-PKG-0245",
+    "invoice_date": "2026-10-05",
+    "due_date": "2026-10-05",
+    "purchase_order_reference": "PO-20261004-02",
+    "currency": "INR",
+    "payment_terms": "Immediate payment / On delivery"
+  },
+  "supplier": {
+    "supplier_id": "SUP-02",
+    "legal_name": "Kanpur Packaging Mart",
+    "trade_name": "Kanpur Packaging & Disposables",
+    "gstin": "09BBBBB2222B1Z2",
+    "address": "Plot 88, Phase 1, Fazalganj Industrial Area, Kanpur, Uttar Pradesh 208012",
+    "phone": "+91 XXXXXX2202"
+  },
+  "buyer": {
+    "legal_name": "Maa Ki Rasoi Cloud Kitchen",
+    "proprietor": "Sunita Sharma",
+    "gstin": "09ZZZZZ9999Z1Z5",
+    "address": "Plot 12, Navin Market Road, Kakadeo, Kanpur, Uttar Pradesh 208025",
+    "phone": "+91 XXXXXX4821"
+  },
+  "line_items": [
+    {
+      "line_no": 1,
+      "item_id": "CONT-750",
+      "description": "Round Microwave Safe Meal Container 750ml with Leakproof Lid",
+      "hsn_code": "3923",
+      "billed_qty": 120.0,
+      "unit": "pcs",
+      "unit_price": 3.20,
+      "taxable_amount": 384.00,
+      "gst_rate_pct": 28.0,
+      "cgst_amount": 53.76,
+      "sgst_amount": 53.76,
+      "gst_amount": 107.52,
+      "line_total": 491.52
+    }
+  ],
+  "financial_summary": {
+    "total_taxable_amount": 384.00,
+    "total_cgst_amount": 53.76,
+    "total_sgst_amount": 53.76,
+    "total_tax_amount": 107.52,
+    "total_amount_payable": 491.52,
+    "amount_in_words": "Four Hundred Ninety One Rupees and Fifty Two Paise Only"
+  },
+  "purchase_order_baseline": {
+    "po_id": "PO-20261004-02",
+    "po_ordered_qty": 100.0,
+    "po_unit_price": 3.20,
+    "po_taxable_amount": 320.00,
+    "po_gst_rate_pct": 18.0,
+    "po_gst_amount": 57.60,
+    "po_total_amount": 377.60,
+    "goods_received_qty": 100.0
+  },
+  "reconciliation_status": {
+    "matched_with_po": false,
+    "matched_with_receipt": false,
+    "discrepancies_detected": 2,
+    "discrepancy_details": [
+      {
+        "type": "quantity_mismatch",
+        "field": "billed_qty",
+        "po_expected": 100.0,
+        "invoice_actual": 120.0,
+        "excess_qty": 20.0,
+        "impact_taxable": 64.00,
+        "description": "Invoice billed 120 pcs, but PO was for 100 pcs and goods receipt confirms only 100 pcs received (+20 pcs overbilling)"
+      },
+      {
+        "type": "tax_rate_mismatch",
+        "field": "gst_rate_pct",
+        "po_expected": "18%",
+        "invoice_actual": "28%",
+        "excess_tax_diff": 49.92,
+        "description": "Invoice applied 28% GST instead of agreed statutory packaging HSN 3923 rate of 18%"
+      }
+    ],
+    "net_overbilling_amount": 113.92
+  }
+}
+

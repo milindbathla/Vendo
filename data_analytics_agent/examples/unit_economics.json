@@ -1,0 +1,167 @@
+{
+  "ok": true,
+  "data": {
+    "menu_item": "Standard Veg Tiffin",
+    "one_off_price": 90.0,
+    "subscriber_price": 85.0,
+    "realized_blended_price": 86.24,
+    "ingredients_cost_per_tiffin": 46.8,
+    "packaging_cost_per_tiffin": 4.4,
+    "total_unit_cogs": 51.2,
+    "contribution_margin_per_tiffin": 35.04,
+    "contribution_margin_pct": 40.6,
+    "avg_daily_opex": 639.44,
+    "avg_daily_units": 21.2,
+    "breakeven_units_per_day": 18.2,
+    "margin_of_safety_units": 3.0,
+    "bottom_up_cogs_pct": 59.4,
+    "reported_cogs_pct": 48.0,
+    "ingredients_breakdown": [
+      {
+        "item_id": "RICE-BAS",
+        "item_name": "Rice",
+        "unit": "kg",
+        "qty_per_tiffin": 0.15,
+        "procure_mode": "catalogue",
+        "unit_cost": 65.0,
+        "cost_per_tiffin": 9.75,
+        "simulated_cost_per_tiffin": 11.25,
+        "item_category": "ingredient"
+      },
+      {
+        "item_id": "DAL-MOONG",
+        "item_name": "Moong dal",
+        "unit": "kg",
+        "qty_per_tiffin": 0.08,
+        "procure_mode": "catalogue",
+        "unit_cost": 112.0,
+        "cost_per_tiffin": 8.96,
+        "simulated_cost_per_tiffin": 10.24,
+        "item_category": "ingredient"
+      },
+      {
+        "item_id": "VEG-MIX",
+        "item_name": "Seasonal vegetables",
+        "unit": "kg",
+        "qty_per_tiffin": 0.25,
+        "procure_mode": "daily_mandi",
+        "unit_cost": 35.09,
+        "cost_per_tiffin": 8.77,
+        "simulated_cost_per_tiffin": 8.77,
+        "item_category": "ingredient"
+      },
+      {
+        "item_id": "OIL-SUN-1L",
+        "item_name": "Refined sunflower oil",
+        "unit": "L",
+        "qty_per_tiffin": 0.06,
+        "procure_mode": "catalogue",
+        "unit_cost": 142.0,
+        "cost_per_tiffin": 8.52,
+        "simulated_cost_per_tiffin": 9.48,
+        "item_category": "ingredient"
+      },
+      {
+        "item_id": "ATTA-10",
+        "item_name": "Wheat flour",
+        "unit": "kg",
+        "qty_per_tiffin": 0.2,
+        "procure_mode": "catalogue",
+        "unit_cost": 40.0,
+        "cost_per_tiffin": 8.0,
+        "simulated_cost_per_tiffin": 9.2,
+        "item_category": "ingredient"
+      },
+      {
+        "item_id": "SPICE-MIX",
+        "item_name": "Spice blend",
+        "unit": "kg",
+        "qty_per_tiffin": 0.01,
+        "procure_mode": "catalogue",
+        "unit_cost": 280.0,
+        "cost_per_tiffin": 2.8,
+        "simulated_cost_per_tiffin": 3.3,
+        "item_category": "ingredient"
+      }
+    ],
+    "packaging_breakdown": [
+      {
+        "item_id": "CONT-750",
+        "item_name": "Tiffin container 750ml",
+        "unit": "pcs",
+        "qty_per_tiffin": 1.0,
+        "procure_mode": "catalogue",
+        "unit_cost": 3.2,
+        "cost_per_tiffin": 3.2,
+        "simulated_cost_per_tiffin": 7.52,
+        "item_category": "packaging"
+      },
+      {
+        "item_id": "BAG-CARRY",
+        "item_name": "Carry bag",
+        "unit": "pcs",
+        "qty_per_tiffin": 1.0,
+        "procure_mode": "catalogue",
+        "unit_cost": 1.2,
+        "cost_per_tiffin": 1.2,
+        "simulated_cost_per_tiffin": 1.8,
+        "item_category": "packaging"
+      }
+    ],
+    "sensitivity_analysis": [
+      {
+        "item_id": "RICE-BAS",
+        "item_name": "Rice",
+        "base_cost_per_tiffin": 9.75,
+        "cost_share_pct": 19.0,
+        "plus_10_pct_cost_impact": 0.975,
+        "margin_after_plus_10": 34.06,
+        "margin_after_minus_10": 36.02
+      },
+      {
+        "item_id": "DAL-MOONG",
+        "item_name": "Moong dal",
+        "base_cost_per_tiffin": 8.96,
+        "cost_share_pct": 17.5,
+        "plus_10_pct_cost_impact": 0.896,
+        "margin_after_plus_10": 34.14,
+        "margin_after_minus_10": 35.94
+      },
+      {
+        "item_id": "VEG-MIX",
+        "item_name": "Seasonal vegetables",
+        "base_cost_per_tiffin": 8.77,
+        "cost_share_pct": 17.1,
+        "plus_10_pct_cost_impact": 0.877,
+        "margin_after_plus_10": 34.16,
+        "margin_after_minus_10": 35.92
+      }
+    ],
+    "simulated_fast_delivery_scenario": {
+      "source": "simulated",
+      "total_cogs": 61.56,
+      "contribution_margin": 24.68,
+      "margin_reduction_rupees": 10.36
+    },
+    "speech_summary": "Standard Veg Tiffin earns Rs 35.04 contribution margin on a Rs 86.24 blended price. Unit COGS is Rs 51.20, and breakeven is 18.2 tiffins daily.",
+    "realized_price": 86.24,
+    "ingredient_cogs": 46.8,
+    "packaging_cogs": 4.4,
+    "unit_cogs": 51.2,
+    "contribution_margin": 35.04,
+    "breakeven_units_daily": 18.2
+  },
+  "confidence": 1.0,
+  "source": "db",
+  "warnings": [
+    "Bottom-up COGS (59.4%) differs from reported ledger COGS (48.0%) by 11.4 pts."
+  ],
+  "error": null,
+  "meta": {
+    "tool": "analyze_product_profitability",
+    "as_of": "2026-10-10T19:10:00+05:30",
+    "period_resolved": null,
+    "latency_ms": 0.75,
+    "queries": 2
+  }
+}

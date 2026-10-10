@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "out_of_scope": true,
+  "error": "out_of_scope",
+  "suggested_agent": "finance_and_procurement_agent",
+  "reason": "Affordability analysis and purchase planning belong to the Finance & Procurement Agent.",
+  "speech_summary": "I cannot advise on purchase decisions directly, but the Finance and Procurement Agent can check your budget and affordability.",
+  "speech_refusal": "I cannot advise on purchase decisions directly, but the Finance and Procurement Agent can check your budget and affordability."
+}

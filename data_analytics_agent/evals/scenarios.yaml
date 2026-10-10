@@ -1,0 +1,159 @@
+# Comprehensive Evaluation Scenarios for Business Intel Agent
+# Archetype: Maa Ki Rasoi Cloud Kitchen, Kanpur
+# Frozen Clock: 2026-10-10T19:10:00+05:30
+
+scenarios:
+  # Context Scenarios
+  - id: CONTEXT-01
+    category: context
+    question: "Give me my morning briefing."
+    expected_tools: ["get_business_overview"]
+    golden_numbers: [12000, 20, 14, 1900]
+
+  - id: CONTEXT-02
+    category: context
+    question: "What is my current cash position and headroom?"
+    expected_tools: ["get_business_overview"]
+    golden_numbers: [12000, 1900]
+
+  - id: CONTEXT-03
+    category: context
+    question: "How many tiffin orders are confirmed for tomorrow?"
+    expected_tools: ["get_business_overview"]
+    golden_numbers: [20, 14]
+
+  - id: CONTEXT-04
+    category: context
+    question: "Do we have any inventory shortage risks for tomorrow's prep?"
+    expected_tools: ["get_business_overview"]
+    keywords: ["container", "sunflower oil"]
+
+  - id: CONTEXT-05
+    category: context
+    question: "What recent changes happened with suppliers or customers in the last 7 days?"
+    expected_tools: ["get_recent_business_changes"]
+    keywords: ["supplier", "price"]
+
+  - id: CONTEXT-06
+    category: context
+    question: "Show me recent operational changes over the past 30 days."
+    expected_tools: ["get_recent_business_changes"]
+
+  - id: CONTEXT-07
+    category: context
+    question: "What policies and facts do we have stored in business memory?"
+    expected_tools: ["get_business_memory"]
+
+  - id: CONTEXT-08
+    category: context
+    question: "Remember that our kitchen opening time is strictly 6:00 AM."
+    expected_tools: ["write_business_memory"]
+    keywords: ["recorded", "statement"]
+
+  - id: CONTEXT-09
+    category: context
+    question: "Remember that refined oil from Gupta Traders is Rs 130 per liter."
+    expected_tools: ["write_business_memory"]
+    keywords: ["conflict", "invoice", "rate"]
+
+  - id: CONTEXT-10
+    category: context
+    question: "Check if there are any memory conflicts on supplier rates."
+    expected_tools: ["get_business_memory"]
+    keywords: ["conflict", "supplier.gupta.oil_price_per_l"]
+
+  # Analytics Scenarios
+  - id: ANALYTICS-01
+    category: analytics
+    question: "How did the kitchen perform over the last 30 days?"
+    expected_tools: ["analyze_business_performance"]
+    golden_numbers: [55320, 639, 9573, 17.3]
+
+  - id: ANALYTICS-02
+    category: analytics
+    question: "What were yesterday's sales and revenue numbers?"
+    expected_tools: ["analyze_business_performance"]
+    keywords: ["yesterday", "revenue"]
+
+  - id: ANALYTICS-03
+    category: analytics
+    question: "How did we perform last week?"
+    expected_tools: ["analyze_business_performance"]
+
+  - id: ANALYTICS-04
+    category: analytics
+    question: "What is our month-to-date business performance?"
+    expected_tools: ["analyze_business_performance"]
+
+  - id: ANALYTICS-05
+    category: analytics
+    question: "What are our unit economics and contribution margin for the Standard Veg Tiffin?"
+    expected_tools: ["analyze_product_profitability"]
+    golden_numbers: [35.04, 86.24, 51.20, 18.2]
+
+  - id: ANALYTICS-06
+    category: analytics
+    question: "What is our daily breakeven volume in meals?"
+    expected_tools: ["analyze_product_profitability"]
+    golden_numbers: [18.2]
+
+  - id: ANALYTICS-07
+    category: analytics
+    question: "Analyze our supplier price trends and inflation over the last 90 days."
+    expected_tools: ["analyze_cost_trends"]
+
+  - id: ANALYTICS-08
+    category: analytics
+    question: "Generate an executive brief report for the last 30 days."
+    expected_tools: ["generate_business_report"]
+    keywords: ["Maa Ki Rasoi", "Executive Summary", "KPI"]
+
+  # Hinglish Scenarios
+  - id: HINGLISH-01
+    category: context
+    question: "Aaj ka cash balance aur kal ka load kya hai?"
+    expected_tools: ["get_business_overview"]
+    golden_numbers: [12000, 20]
+
+  - id: HINGLISH-02
+    category: context
+    question: "Pichhle 7 din me kya kya changes huye kitchen me?"
+    expected_tools: ["get_recent_business_changes"]
+
+  - id: HINGLISH-03
+    category: analytics
+    question: "Pichhle mahine ka profit aur margin kaisa raha?"
+    expected_tools: ["analyze_business_performance"]
+
+  # Both Scenarios
+  - id: BOTH-01
+    category: both
+    question: "How did my week go and what operational issues came up?"
+    expected_tools: ["analyze_business_performance", "get_recent_business_changes"]
+
+  # Out of Scope Scenarios (5 Categories)
+  - id: OOS-PROCUREMENT
+    category: out_of_scope
+    question: "Can I afford to buy 50kg basmati rice from Sharma Traders right now?"
+    expected_agent: "finance_and_procurement_agent"
+
+  - id: OOS-CAPACITY
+    category: out_of_scope
+    question: "Can I take 50 more orders tomorrow afternoon for a corporate lunch?"
+    expected_agent: "demand_and_capacity_agent"
+
+  - id: OOS-DOCUMENT
+    category: out_of_scope
+    question: "Verify this bill from Gupta Traders. Is this invoice authentic?"
+    expected_agent: "document_agent"
+
+  - id: OOS-GROWTH
+    category: out_of_scope
+    question: "How do I get more customers using Instagram ads and pamphlets in Kakadeo?"
+    expected_agent: "customer_growth_agent"
+
+  - id: OOS-EXECUTION
+    category: out_of_scope
+    question: "Pay Sharma ₹5000 right now and place the order for oil."
+    expected_agent: "commerce_execution_agent"
+

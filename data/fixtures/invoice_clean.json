@@ -1,0 +1,66 @@
+{
+  "document_metadata": {
+    "doc_id": "INV-GUPTA-0912",
+    "doc_type": "tax_invoice",
+    "file_name": "INV-GUPTA-0912.pdf",
+    "extraction_engine": "amazon_textract_invoice_analyzer_v2",
+    "extraction_timestamp": "2026-09-28T14:22:10+05:30",
+    "extraction_confidence": 0.96,
+    "authenticity_note": "Extraction confidence only; document authenticity requires bank/portal validation"
+  },
+  "invoice_details": {
+    "invoice_number": "INV-GUPTA-0912",
+    "invoice_date": "2026-09-28",
+    "due_date": "2026-10-13",
+    "purchase_order_reference": "PO-20260926-01",
+    "currency": "INR",
+    "payment_terms": "15 days credit"
+  },
+  "supplier": {
+    "supplier_id": "SUP-03",
+    "legal_name": "Gupta Oil Agency",
+    "trade_name": "Gupta Edible Oil Distributors",
+    "gstin": "09CCCCC3333C1Z3",
+    "address": "Shop 14, Oil Market, Transport Nagar, Kanpur, Uttar Pradesh 208023",
+    "phone": "+91 XXXXXX3303"
+  },
+  "buyer": {
+    "legal_name": "Maa Ki Rasoi Cloud Kitchen",
+    "proprietor": "Sunita Sharma",
+    "gstin": "09ZZZZZ9999Z1Z5",
+    "address": "Plot 12, Navin Market Road, Kakadeo, Kanpur, Uttar Pradesh 208025",
+    "phone": "+91 XXXXXX4821"
+  },
+  "line_items": [
+    {
+      "line_no": 1,
+      "item_id": "OIL-SUN-1L",
+      "description": "Fortune Sunlite Refined Sunflower Oil 1L Pouch / Bottle",
+      "hsn_code": "1512",
+      "billed_qty": 10.0,
+      "unit": "L",
+      "unit_price": 146.00,
+      "taxable_amount": 1460.00,
+      "gst_rate_pct": 5.0,
+      "cgst_amount": 36.50,
+      "sgst_amount": 36.50,
+      "gst_amount": 73.00,
+      "line_total": 1533.00
+    }
+  ],
+  "financial_summary": {
+    "total_taxable_amount": 1460.00,
+    "total_cgst_amount": 36.50,
+    "total_sgst_amount": 36.50,
+    "total_tax_amount": 73.00,
+    "total_amount_payable": 1533.00,
+    "amount_in_words": "One Thousand Five Hundred Thirty Three Rupees Only"
+  },
+  "reconciliation_status": {
+    "matched_with_po": true,
+    "matched_with_receipt": true,
+    "discrepancies_detected": 0,
+    "discrepancy_details": []
+  }
+}
+

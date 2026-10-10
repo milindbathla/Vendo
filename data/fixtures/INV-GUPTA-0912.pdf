@@ -1,0 +1,88 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /MediaBox [0 0 595 842] /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Length 1771 >>
+stream
+BT
+/F2 16 Tf
+50 780 Td
+(TAX INVOICE: INV-GUPTA-0912) Tj
+/F1 10 Tf
+0 -30 Td
+0 -14 Td
+(TAX INVOICE - GUPTA OIL AGENCY) Tj
+0 -14 Td
+(GSTIN: 09CCCCC3333C1Z3 | State: Uttar Pradesh \(09\)) Tj
+0 -14 Td
+(Address: Shop 14, Transport Nagar, Kanpur, UP) Tj
+0 -14 Td
+(Phone: +91 XXXXXX3303 | Email: accounts@guptaoilagency.synthetic) Tj
+0 -16 Td
+(================================================================================) Tj
+0 -14 Td
+(Billed To: Maa Ki Rasoi Cloud Kitchen \(Prop: Sunita Sharma\)) Tj
+0 -14 Td
+(GSTIN: 09ZZZZZ9999Z1Z5 | Locality: Kakadeo, Kanpur, UP) Tj
+0 -14 Td
+(Invoice No: INV-GUPTA-0912          Date: 2026-09-28) Tj
+0 -14 Td
+(PO Ref:     PO-20260926-01          Payment Mode: UPI / Credit \(15 Days\)) Tj
+0 -16 Td
+(================================================================================) Tj
+0 -14 Td
+(ITEM DESCRIPTION                   QTY    UNIT RATE   TAXABLE   GST%    TOTAL) Tj
+0 -14 Td
+(--------------------------------------------------------------------------------) Tj
+0 -14 Td
+(Refined Sunflower Oil 1L Pouch     10 L   Rs 146.00   1460.00    5%   1533.00) Tj
+0 -14 Td
+(--------------------------------------------------------------------------------) Tj
+0 -14 Td
+(SUBTOTAL \(TAXABLE\):                Rs 1,460.00) Tj
+0 -14 Td
+(CGST \(2.5%\):                       Rs    36.50) Tj
+0 -14 Td
+(SGST \(2.5%\):                       Rs    36.50) Tj
+/F2 10 Tf
+0 -16 Td
+(TOTAL INVOICE AMOUNT:              Rs 1,533.00) Tj
+/F1 10 Tf
+0 -16 Td
+(================================================================================) Tj
+0 -14 Td
+(Amount in Words: One Thousand Five Hundred Thirty-Three Rupees Only.) Tj
+0 -14 Td
+(Goods received in good condition. Matched with PO-20260926-01.) Tj
+0 -14 Td
+(Authorised Signatory: Gupta Oil Agency) Tj
+ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000321 00000 n 
+0000000396 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+2219
+%%EOF

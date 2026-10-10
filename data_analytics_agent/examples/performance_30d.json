@@ -1,0 +1,236 @@
+{
+  "ok": true,
+  "data": {
+    "period": "last_30d",
+    "start_date": "2026-09-10",
+    "end_date": "2026-10-09",
+    "compare_to": "previous_period",
+    "comparison_start": "2026-08-11",
+    "comparison_end": "2026-09-09",
+    "complete_days": true,
+    "metrics": {
+      "recorded_days": 30,
+      "units_sold": 639,
+      "revenue": 55320.0,
+      "cogs": 26545.72,
+      "gross_profit": 28774.28,
+      "gross_margin_pct": 52.0,
+      "opex": 19200.54,
+      "net_profit": 9573.74,
+      "net_margin_pct": 17.3,
+      "avg_revenue_per_unit": 86.57,
+      "avg_units_per_day": 21.3,
+      "avg_revenue_per_day": 1844.0,
+      "sub_units": 438,
+      "sub_revenue": 37230.0,
+      "one_off_units": 201,
+      "one_off_revenue": 18090.0,
+      "sub_units_share_pct": 68.5,
+      "sub_revenue_share_pct": 67.3,
+      "cancelled_orders": 0,
+      "refunded_orders": 0,
+      "cancellation_refund_rate_pct": 0.0,
+      "cash_inflow": 55249.9,
+      "cash_outflow": 45605.9,
+      "net_cash_flow": 9644.0,
+      "mrr": 158100.0,
+      "arr": 1897200.0,
+      "current_customers": 95,
+      "recurring_pct": 64.2,
+      "new_customers": 9,
+      "churned_customers": 2,
+      "avg_internal_rating": 3.57,
+      "review_count": 51,
+      "net_profit_margin_pct": 17.3
+    },
+    "comparison_metrics": {
+      "recorded_days": 30,
+      "units_sold": 650,
+      "revenue": 56255.0,
+      "cogs": 27003.98,
+      "gross_profit": 29251.02,
+      "gross_margin_pct": 52.0,
+      "opex": 19146.84,
+      "net_profit": 10104.18,
+      "net_margin_pct": 18.0,
+      "avg_revenue_per_unit": 86.55,
+      "avg_units_per_day": 21.7,
+      "avg_revenue_per_day": 1875.17,
+      "sub_units": 449,
+      "sub_revenue": 38165.0,
+      "one_off_units": 201,
+      "one_off_revenue": 18090.0,
+      "sub_units_share_pct": 69.1,
+      "sub_revenue_share_pct": 67.8,
+      "cancelled_orders": 0,
+      "refunded_orders": 0,
+      "cancellation_refund_rate_pct": 0.0,
+      "cash_inflow": 56275.93,
+      "cash_outflow": 46376.18,
+      "net_cash_flow": 9899.75,
+      "mrr": 158100.0,
+      "arr": 1897200.0,
+      "current_customers": 89,
+      "recurring_pct": 64.0,
+      "new_customers": 3,
+      "churned_customers": 3,
+      "avg_internal_rating": 3.81,
+      "review_count": 53
+    },
+    "deltas": {
+      "units_sold": {
+        "absolute": -11.0,
+        "pct": -1.69
+      },
+      "revenue": {
+        "absolute": -935.0,
+        "pct": -1.66
+      },
+      "cogs": {
+        "absolute": -458.26,
+        "pct": -1.7
+      },
+      "gross_profit": {
+        "absolute": -476.74,
+        "pct": -1.63
+      },
+      "gross_margin_pct": {
+        "absolute": 0.0,
+        "pct": 0.0
+      },
+      "opex": {
+        "absolute": 53.7,
+        "pct": 0.28
+      },
+      "net_profit": {
+        "absolute": -530.44,
+        "pct": -5.25
+      },
+      "net_margin_pct": {
+        "absolute": -0.7,
+        "pct": -3.89
+      },
+      "avg_revenue_per_unit": {
+        "absolute": 0.02,
+        "pct": 0.02
+      },
+      "avg_units_per_day": {
+        "absolute": -0.4,
+        "pct": -1.84
+      },
+      "sub_units_share_pct": {
+        "absolute": -0.6,
+        "pct": -0.87
+      },
+      "sub_revenue_share_pct": {
+        "absolute": -0.5,
+        "pct": -0.74
+      },
+      "cancellation_refund_rate_pct": {
+        "absolute": 0.0,
+        "pct": 0.0
+      },
+      "cash_inflow": {
+        "absolute": -1026.03,
+        "pct": -1.82
+      },
+      "cash_outflow": {
+        "absolute": -770.28,
+        "pct": -1.66
+      },
+      "net_cash_flow": {
+        "absolute": -255.75,
+        "pct": -2.58
+      },
+      "current_customers": {
+        "absolute": 6.0,
+        "pct": 6.74
+      },
+      "recurring_pct": {
+        "absolute": 0.2,
+        "pct": 0.31
+      }
+    },
+    "best_day": {
+      "date": "2026-09-11",
+      "day_of_week": "Friday",
+      "units_sold": 25,
+      "revenue": 2170.0
+    },
+    "worst_day": {
+      "date": "2026-09-27",
+      "day_of_week": "Sunday",
+      "units_sold": 15,
+      "revenue": 1300.0
+    },
+    "day_of_week_profile": {
+      "Thursday": {
+        "avg_units": 22.6,
+        "avg_revenue": 1957.0,
+        "sample_days": 5
+      },
+      "Friday": {
+        "avg_units": 22.8,
+        "avg_revenue": 1974.0,
+        "sample_days": 5
+      },
+      "Saturday": {
+        "avg_units": 16.0,
+        "avg_revenue": 1386.25,
+        "sample_days": 4
+      },
+      "Sunday": {
+        "avg_units": 16.2,
+        "avg_revenue": 1406.25,
+        "sample_days": 4
+      },
+      "Monday": {
+        "avg_units": 24.2,
+        "avg_revenue": 2101.25,
+        "sample_days": 4
+      },
+      "Tuesday": {
+        "avg_units": 23.5,
+        "avg_revenue": 2032.5,
+        "sample_days": 4
+      },
+      "Wednesday": {
+        "avg_units": 23.0,
+        "avg_revenue": 1990.0,
+        "sample_days": 4
+      }
+    },
+    "anomalies": [],
+    "insights": [
+      {
+        "finding": "Weekend revenue averages \u20b91,396/day vs \u20b92,011/day on weekdays (-30.6%).",
+        "evidence": {
+          "avg_weekend": 1396.25,
+          "avg_weekday": 2010.95,
+          "gap_pct": -30.6
+        },
+        "severity": "info"
+      },
+      {
+        "finding": "Subscriptions generate 67.3% of tiffin revenue, providing recurring cash stability.",
+        "evidence": {
+          "sub_revenue_share_pct": 67.3,
+          "sub_units": 438
+        },
+        "severity": "info"
+      }
+    ],
+    "speech_summary": "In last_30d, revenue was Rs 55320 (-1.7% vs previous period) from 639 tiffins. Net profit was Rs 9573 with 17.3% margin."
+  },
+  "confidence": 1.0,
+  "source": "db",
+  "warnings": [],
+  "error": null,
+  "meta": {
+    "tool": "analyze_business_performance",
+    "as_of": "2026-10-10T19:10:00+05:30",
+    "period_resolved": "2026-09-10..2026-10-09",
+    "latency_ms": 1.15,
+    "queries": 3
+  }
+}

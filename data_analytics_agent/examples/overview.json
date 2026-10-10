@@ -1,0 +1,491 @@
+{
+  "ok": true,
+  "data": {
+    "identity": {
+      "business_name": "Maa Ki Rasoi Cloud Kitchen",
+      "archetype": "tiffin / cloud kitchen",
+      "owner_name": "Sunita Sharma",
+      "city": "Kanpur",
+      "locality": "Kakadeo",
+      "state": "Uttar Pradesh",
+      "currency": "INR",
+      "menu_item": "Standard Veg Tiffin",
+      "price_one_off": 90.0,
+      "price_subscription": 85.0
+    },
+    "as_of": "2026-10-10T19:10:00+05:30",
+    "is_partial_day": true,
+    "cash": {
+      "current_balance": 12000.0,
+      "min_cash_buffer": 5000.0,
+      "min_projected_balance_14d": 6900.0,
+      "min_projected_date": "2026-10-12",
+      "headroom_over_buffer": 1900.0,
+      "next_7d_obligations_total": 19650.0,
+      "obligations_list": [
+        {
+          "payment_id": "PAY-01",
+          "payee": "Kitchen Staff (Ramesh & Geeta)",
+          "category": "salaries",
+          "amount": 7500.0,
+          "due_date": "2026-10-11",
+          "status": "pending"
+        },
+        {
+          "payment_id": "PAY-02",
+          "payee": "Sharma General Traders",
+          "category": "supplier_dues",
+          "amount": 4200.0,
+          "due_date": "2026-10-12",
+          "status": "pending"
+        },
+        {
+          "payment_id": "PAY-03",
+          "payee": "Indane Gas Agency",
+          "category": "utilities_lpg",
+          "amount": 1950.0,
+          "due_date": "2026-10-14",
+          "status": "pending"
+        },
+        {
+          "payment_id": "PAY-04",
+          "payee": "Commercial Space Landlord",
+          "category": "rent",
+          "amount": 6000.0,
+          "due_date": "2026-10-15",
+          "status": "pending"
+        }
+      ],
+      "balance_confidence": 0.88
+    },
+    "tomorrow": {
+      "tomorrow_date": "2026-10-11",
+      "confirmed_units": 20,
+      "confirmed_meals": 20,
+      "free_slots": 14,
+      "subscription_units": 14,
+      "one_off_units": 6,
+      "forecast_units": 23.0,
+      "lower": 20.0,
+      "upper": 26.0,
+      "confidence": 0.82,
+      "effective_target": 25.3,
+      "max_meals": 40,
+      "cook_hours": 6.0,
+      "slots": [
+        {
+          "slot_id": "SLOT-20261011-1",
+          "slot_label": "11:00-12:00",
+          "start_time": "11:00",
+          "end_time": "12:00",
+          "capacity_units": 10,
+          "booked_units": 6,
+          "free_units": 4,
+          "is_afternoon": 0
+        },
+        {
+          "slot_id": "SLOT-20261011-2",
+          "slot_label": "12:00-13:00",
+          "start_time": "12:00",
+          "end_time": "13:00",
+          "capacity_units": 10,
+          "booked_units": 8,
+          "free_units": 2,
+          "is_afternoon": 0
+        },
+        {
+          "slot_id": "SLOT-20261011-3",
+          "slot_label": "13:00-14:00",
+          "start_time": "13:00",
+          "end_time": "14:00",
+          "capacity_units": 10,
+          "booked_units": 4,
+          "free_units": 6,
+          "is_afternoon": 1
+        },
+        {
+          "slot_id": "SLOT-20261011-4",
+          "slot_label": "14:00-15:00",
+          "start_time": "14:00",
+          "end_time": "15:00",
+          "capacity_units": 10,
+          "booked_units": 2,
+          "free_units": 8,
+          "is_afternoon": 1
+        }
+      ],
+      "total_free_units": 20,
+      "afternoon_free_units": 14
+    },
+    "inventory_alerts": [
+      {
+        "item_id": "CONT-750",
+        "item_name": "Tiffin container 750ml",
+        "unit": "pcs",
+        "procure_mode": "catalogue",
+        "stock_qty": 12.0,
+        "reorder_point": 40.0,
+        "par_level": 200.0,
+        "bom_qty": 1.0,
+        "tomorrow_requirement": 26.0,
+        "shortfall_qty": 14.0,
+        "projected_stock_after": -14.0,
+        "is_alert": 1
+      },
+      {
+        "item_id": "OIL-SUN-1L",
+        "item_name": "Refined sunflower oil",
+        "unit": "L",
+        "procure_mode": "catalogue",
+        "stock_qty": 0.8,
+        "reorder_point": 2.0,
+        "par_level": 6.0,
+        "bom_qty": 0.06,
+        "tomorrow_requirement": 1.518,
+        "shortfall_qty": 0.718,
+        "projected_stock_after": -0.718,
+        "is_alert": 1
+      },
+      {
+        "item_id": "ATTA-10",
+        "item_name": "Wheat flour",
+        "unit": "kg",
+        "procure_mode": "catalogue",
+        "stock_qty": 14.0,
+        "reorder_point": 10.0,
+        "par_level": 40.0,
+        "bom_qty": 0.2,
+        "tomorrow_requirement": 5.06,
+        "shortfall_qty": 0.0,
+        "projected_stock_after": 8.94,
+        "is_alert": 1
+      },
+      {
+        "item_id": "DAL-MOONG",
+        "item_name": "Moong dal",
+        "unit": "kg",
+        "procure_mode": "catalogue",
+        "stock_qty": 3.5,
+        "reorder_point": 4.0,
+        "par_level": 12.0,
+        "bom_qty": 0.08,
+        "tomorrow_requirement": 2.024,
+        "shortfall_qty": 0.0,
+        "projected_stock_after": 1.476,
+        "is_alert": 1
+      },
+      {
+        "item_id": "VEG-MIX",
+        "item_name": "Seasonal vegetables",
+        "unit": "kg",
+        "procure_mode": "daily_mandi",
+        "stock_qty": 7.0,
+        "reorder_point": 5.0,
+        "par_level": 12.0,
+        "bom_qty": 0.25,
+        "tomorrow_requirement": 6.325,
+        "shortfall_qty": 0.0,
+        "projected_stock_after": 0.675,
+        "is_alert": 1
+      }
+    ],
+    "customers": {
+      "current_customers": 96,
+      "recurring_customers": 62,
+      "one_off_customers": 34,
+      "recurring_pct": 64.6,
+      "new_30d": 10,
+      "churned_30d": 2
+    },
+    "reputation": {
+      "internal_avg_rating": 3.57,
+      "internal_review_count": 51,
+      "internet_avg_rating": 4.33,
+      "internet_review_count": 40,
+      "total_low_rating_30d": 17
+    },
+    "open_supplier_issues": [
+      {
+        "update_id": "SUPD-001",
+        "supplier_id": "SUP-01",
+        "supplier_name": "Sharma General Traders",
+        "date": "2026-10-08",
+        "type": "stockout",
+        "message": "Sunflower oil 1L warehouse stock exhausted; next container shipment arriving 2026-10-13."
+      },
+      {
+        "update_id": "SUPD-006",
+        "supplier_id": "SUP-02",
+        "supplier_name": "Kanpur Packaging Mart",
+        "date": "2026-10-06",
+        "type": "stockout",
+        "message": "Heavy demand on 750ml containers; fresh consignment arriving Sunday morning."
+      },
+      {
+        "update_id": "SUPD-003",
+        "supplier_id": "SUP-03",
+        "supplier_name": "Gupta Oil Agency",
+        "date": "2026-10-01",
+        "type": "price_change",
+        "message": "Edible oil rate revised to Rs 148/L effective 1st October due to festival transport costs."
+      }
+    ],
+    "ledger_flags": {
+      "total_supplier_dues": 4200.0,
+      "total_customer_outstanding": 170.0,
+      "customers_with_balance": 1
+    },
+    "memory_conflicts": {
+      "count": 2,
+      "keys": [
+        "supplier.gupta.oil_price_per_l",
+        "supplier.gupta.oil_price_per_l"
+      ],
+      "details": [
+        {
+          "key": "supplier.gupta.oil_price_per_l",
+          "verified_value": "146",
+          "verified_confidence": 0.95,
+          "owner_value": "135",
+          "owner_confidence": 0.4,
+          "owner_timestamp": "2026-10-02T11:15:00+05:30"
+        },
+        {
+          "key": "supplier.gupta.oil_price_per_l",
+          "verified_value": "146",
+          "verified_confidence": 0.95,
+          "owner_value": "130",
+          "owner_confidence": 0.4,
+          "owner_timestamp": "2026-10-10T19:10:00+05:30"
+        }
+      ]
+    },
+    "top_signals": [
+      {
+        "severity": "alert",
+        "category": "inventory",
+        "title": "Immediate ingredient shortfall for tomorrow",
+        "finding": "Shortfall detected for tomorrow: Tiffin container 750ml (14.0 pcs), Refined sunflower oil (0.718 L).",
+        "evidence": {
+          "shortfalls": [
+            {
+              "item_id": "CONT-750",
+              "item_name": "Tiffin container 750ml",
+              "unit": "pcs",
+              "procure_mode": "catalogue",
+              "stock_qty": 12.0,
+              "reorder_point": 40.0,
+              "par_level": 200.0,
+              "bom_qty": 1.0,
+              "tomorrow_requirement": 26.0,
+              "shortfall_qty": 14.0,
+              "projected_stock_after": -14.0,
+              "is_alert": 1
+            },
+            {
+              "item_id": "OIL-SUN-1L",
+              "item_name": "Refined sunflower oil",
+              "unit": "L",
+              "procure_mode": "catalogue",
+              "stock_qty": 0.8,
+              "reorder_point": 2.0,
+              "par_level": 6.0,
+              "bom_qty": 0.06,
+              "tomorrow_requirement": 1.518,
+              "shortfall_qty": 0.718,
+              "projected_stock_after": -0.718,
+              "is_alert": 1
+            }
+          ]
+        }
+      },
+      {
+        "severity": "notice",
+        "category": "cash",
+        "title": "Tight liquidity headroom",
+        "finding": "Cash headroom is \u20b91,900 over the mandatory \u20b95,000 buffer on 2026-10-12.",
+        "evidence": {
+          "headroom": 1900.0
+        }
+      },
+      {
+        "severity": "notice",
+        "category": "capacity",
+        "title": "Unbooked afternoon delivery slots",
+        "finding": "Kitchen has 14 free units across afternoon delivery slots tomorrow.",
+        "evidence": {
+          "afternoon_free_units": 14,
+          "total_free_units": 20
+        }
+      },
+      {
+        "severity": "notice",
+        "category": "supplier",
+        "title": "Active supplier update from Sharma General Traders",
+        "finding": "Sunflower oil 1L warehouse stock exhausted; next container shipment arriving 2026-10-13.",
+        "evidence": {
+          "update_id": "SUPD-001"
+        }
+      },
+      {
+        "severity": "notice",
+        "category": "memory",
+        "title": "Verified price conflicts with owner statement",
+        "finding": "Invoice verified \u20b9146 vs owner statement \u20b9135 for supplier.gupta.oil_price_per_l.",
+        "evidence": {
+          "key": "supplier.gupta.oil_price_per_l"
+        }
+      }
+    ],
+    "speech_summary": "Cash is Rs 12000. Tomorrow has 20 confirmed tiffins with 14 free afternoon slots. You are short on Tiffin container 750ml and Refined sunflower oil, and cash headroom is Rs 1900.",
+    "cash_position": {
+      "current_balance": 12000.0,
+      "min_cash_buffer": 5000.0,
+      "min_projected_balance_14d": 6900.0,
+      "min_projected_date": "2026-10-12",
+      "headroom_over_buffer": 1900.0,
+      "next_7d_obligations_total": 19650.0,
+      "obligations_list": [
+        {
+          "payment_id": "PAY-01",
+          "payee": "Kitchen Staff (Ramesh & Geeta)",
+          "category": "salaries",
+          "amount": 7500.0,
+          "due_date": "2026-10-11",
+          "status": "pending"
+        },
+        {
+          "payment_id": "PAY-02",
+          "payee": "Sharma General Traders",
+          "category": "supplier_dues",
+          "amount": 4200.0,
+          "due_date": "2026-10-12",
+          "status": "pending"
+        },
+        {
+          "payment_id": "PAY-03",
+          "payee": "Indane Gas Agency",
+          "category": "utilities_lpg",
+          "amount": 1950.0,
+          "due_date": "2026-10-14",
+          "status": "pending"
+        },
+        {
+          "payment_id": "PAY-04",
+          "payee": "Commercial Space Landlord",
+          "category": "rent",
+          "amount": 6000.0,
+          "due_date": "2026-10-15",
+          "status": "pending"
+        }
+      ],
+      "balance_confidence": 0.88
+    },
+    "tomorrow_load": {
+      "tomorrow_date": "2026-10-11",
+      "confirmed_units": 20,
+      "confirmed_meals": 20,
+      "free_slots": 14,
+      "subscription_units": 14,
+      "one_off_units": 6,
+      "forecast_units": 23.0,
+      "lower": 20.0,
+      "upper": 26.0,
+      "confidence": 0.82,
+      "effective_target": 25.3,
+      "max_meals": 40,
+      "cook_hours": 6.0,
+      "slots": [
+        {
+          "slot_id": "SLOT-20261011-1",
+          "slot_label": "11:00-12:00",
+          "start_time": "11:00",
+          "end_time": "12:00",
+          "capacity_units": 10,
+          "booked_units": 6,
+          "free_units": 4,
+          "is_afternoon": 0
+        },
+        {
+          "slot_id": "SLOT-20261011-2",
+          "slot_label": "12:00-13:00",
+          "start_time": "12:00",
+          "end_time": "13:00",
+          "capacity_units": 10,
+          "booked_units": 8,
+          "free_units": 2,
+          "is_afternoon": 0
+        },
+        {
+          "slot_id": "SLOT-20261011-3",
+          "slot_label": "13:00-14:00",
+          "start_time": "13:00",
+          "end_time": "14:00",
+          "capacity_units": 10,
+          "booked_units": 4,
+          "free_units": 6,
+          "is_afternoon": 1
+        },
+        {
+          "slot_id": "SLOT-20261011-4",
+          "slot_label": "14:00-15:00",
+          "start_time": "14:00",
+          "end_time": "15:00",
+          "capacity_units": 10,
+          "booked_units": 2,
+          "free_units": 8,
+          "is_afternoon": 1
+        }
+      ],
+      "total_free_units": 20,
+      "afternoon_free_units": 14
+    },
+    "shortage_risks": [
+      {
+        "item_id": "CONT-750",
+        "item_name": "Tiffin container 750ml",
+        "unit": "pcs",
+        "procure_mode": "catalogue",
+        "stock_qty": 12.0,
+        "reorder_point": 40.0,
+        "par_level": 200.0,
+        "bom_qty": 1.0,
+        "tomorrow_requirement": 26.0,
+        "shortfall_qty": 14.0,
+        "projected_stock_after": -14.0,
+        "is_alert": 1
+      },
+      {
+        "item_id": "OIL-SUN-1L",
+        "item_name": "Refined sunflower oil",
+        "unit": "L",
+        "procure_mode": "catalogue",
+        "stock_qty": 0.8,
+        "reorder_point": 2.0,
+        "par_level": 6.0,
+        "bom_qty": 0.06,
+        "tomorrow_requirement": 1.518,
+        "shortfall_qty": 0.718,
+        "projected_stock_after": -0.718,
+        "is_alert": 1
+      }
+    ]
+  },
+  "confidence": 0.8,
+  "source": "db",
+  "warnings": [
+    "Memory conflict detected on 2 key(s): supplier.gupta.oil_price_per_l, supplier.gupta.oil_price_per_l",
+    "Low forecast confidence (0.45) on 2026-10-20 (Dussehra)",
+    "Low forecast confidence (0.58) on 2026-10-22",
+    "Low forecast confidence (0.55) on 2026-10-23",
+    "Low forecast confidence (0.50) on 2026-10-24"
+  ],
+  "error": null,
+  "meta": {
+    "tool": "get_business_overview",
+    "as_of": "2026-10-10T19:10:00+05:30",
+    "period_resolved": "2026-10-10",
+    "latency_ms": 1.6,
+    "queries": 8
+  }
+}

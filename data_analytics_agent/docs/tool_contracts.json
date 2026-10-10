@@ -1,0 +1,1206 @@
+{
+  "get_business_overview": {
+    "name": "get_business_overview",
+    "category": "context",
+    "description": "Owner's morning/evening briefing. Returns cash position, tomorrow's load, shortage risks, customer counts, unread supplier issues, pending ledgers, and memory conflicts.",
+    "parameters": {
+      "description": "Input parameters for get_business_overview (takes no arguments).",
+      "properties": {},
+      "title": "GetBusinessOverviewInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "ToolMeta": {
+          "description": "Execution metadata attached to tool results.",
+          "properties": {
+            "tool": {
+              "description": "Name of the tool executed",
+              "title": "Tool",
+              "type": "string"
+            },
+            "as_of": {
+              "description": "Frozen timestamp as of which the query ran",
+              "title": "As Of",
+              "type": "string"
+            },
+            "period_resolved": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Resolved date window if applicable",
+              "title": "Period Resolved"
+            },
+            "latency_ms": {
+              "default": 0.0,
+              "description": "Execution latency in milliseconds",
+              "title": "Latency Ms",
+              "type": "number"
+            },
+            "queries": {
+              "default": 1,
+              "description": "Number of database queries executed",
+              "title": "Queries",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "tool",
+            "as_of"
+          ],
+          "title": "ToolMeta",
+          "type": "object"
+        }
+      },
+      "description": "Standardized response envelope returned by all tools.",
+      "properties": {
+        "ok": {
+          "description": "Whether the tool succeeded",
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "data": {
+          "additionalProperties": true,
+          "description": "Precomputed structured payload including speech_summary",
+          "title": "Data",
+          "type": "object"
+        },
+        "confidence": {
+          "description": "Calculated confidence score [0.0, 1.0]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "source": {
+          "description": "Origin category: db, estimate, or simulated",
+          "enum": [
+            "db",
+            "estimate",
+            "simulated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "warnings": {
+          "description": "Any warnings, caveat flags, or partial day alerts",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error message if tool failed",
+          "title": "Error"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolMeta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tool execution telemetry"
+        }
+      },
+      "required": [
+        "ok",
+        "confidence",
+        "source"
+      ],
+      "title": "Envelope",
+      "type": "object"
+    }
+  },
+  "get_recent_business_changes": {
+    "name": "get_recent_business_changes",
+    "category": "context",
+    "description": "Chronological log of what happened across suppliers, customers, and operations over the last N days (defaults to 7).",
+    "parameters": {
+      "description": "Input parameters for get_recent_business_changes.",
+      "properties": {
+        "since": {
+          "default": "7d",
+          "description": "Lookback window: '24h', '48h', '7d', '30d', 'since_yesterday', or ISO date/datetime",
+          "title": "Since",
+          "type": "string"
+        }
+      },
+      "title": "GetRecentBusinessChangesInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "ToolMeta": {
+          "description": "Execution metadata attached to tool results.",
+          "properties": {
+            "tool": {
+              "description": "Name of the tool executed",
+              "title": "Tool",
+              "type": "string"
+            },
+            "as_of": {
+              "description": "Frozen timestamp as of which the query ran",
+              "title": "As Of",
+              "type": "string"
+            },
+            "period_resolved": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Resolved date window if applicable",
+              "title": "Period Resolved"
+            },
+            "latency_ms": {
+              "default": 0.0,
+              "description": "Execution latency in milliseconds",
+              "title": "Latency Ms",
+              "type": "number"
+            },
+            "queries": {
+              "default": 1,
+              "description": "Number of database queries executed",
+              "title": "Queries",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "tool",
+            "as_of"
+          ],
+          "title": "ToolMeta",
+          "type": "object"
+        }
+      },
+      "description": "Standardized response envelope returned by all tools.",
+      "properties": {
+        "ok": {
+          "description": "Whether the tool succeeded",
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "data": {
+          "additionalProperties": true,
+          "description": "Precomputed structured payload including speech_summary",
+          "title": "Data",
+          "type": "object"
+        },
+        "confidence": {
+          "description": "Calculated confidence score [0.0, 1.0]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "source": {
+          "description": "Origin category: db, estimate, or simulated",
+          "enum": [
+            "db",
+            "estimate",
+            "simulated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "warnings": {
+          "description": "Any warnings, caveat flags, or partial day alerts",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error message if tool failed",
+          "title": "Error"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolMeta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tool execution telemetry"
+        }
+      },
+      "required": [
+        "ok",
+        "confidence",
+        "source"
+      ],
+      "title": "Envelope",
+      "type": "object"
+    }
+  },
+  "get_business_memory": {
+    "name": "get_business_memory",
+    "category": "context",
+    "description": "Retrieve verified records, policies, and owner-stated facts stored in memory, with conflict flags when statements conflict with records.",
+    "parameters": {
+      "description": "Input parameters for get_business_memory.",
+      "properties": {
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Specific knowledge key (e.g. 'supplier.gupta.oil_price_per_l'). If None, lists all keys.",
+          "title": "Key"
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Filter keys by dot-separated prefix (e.g. 'supplier.', 'owner.')",
+          "title": "Prefix"
+        },
+        "include_history": {
+          "default": false,
+          "description": "Whether to return all candidate historical observations per key",
+          "title": "Include History",
+          "type": "boolean"
+        }
+      },
+      "title": "GetBusinessMemoryInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "ToolMeta": {
+          "description": "Execution metadata attached to tool results.",
+          "properties": {
+            "tool": {
+              "description": "Name of the tool executed",
+              "title": "Tool",
+              "type": "string"
+            },
+            "as_of": {
+              "description": "Frozen timestamp as of which the query ran",
+              "title": "As Of",
+              "type": "string"
+            },
+            "period_resolved": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Resolved date window if applicable",
+              "title": "Period Resolved"
+            },
+            "latency_ms": {
+              "default": 0.0,
+              "description": "Execution latency in milliseconds",
+              "title": "Latency Ms",
+              "type": "number"
+            },
+            "queries": {
+              "default": 1,
+              "description": "Number of database queries executed",
+              "title": "Queries",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "tool",
+            "as_of"
+          ],
+          "title": "ToolMeta",
+          "type": "object"
+        }
+      },
+      "description": "Standardized response envelope returned by all tools.",
+      "properties": {
+        "ok": {
+          "description": "Whether the tool succeeded",
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "data": {
+          "additionalProperties": true,
+          "description": "Precomputed structured payload including speech_summary",
+          "title": "Data",
+          "type": "object"
+        },
+        "confidence": {
+          "description": "Calculated confidence score [0.0, 1.0]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "source": {
+          "description": "Origin category: db, estimate, or simulated",
+          "enum": [
+            "db",
+            "estimate",
+            "simulated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "warnings": {
+          "description": "Any warnings, caveat flags, or partial day alerts",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error message if tool failed",
+          "title": "Error"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolMeta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tool execution telemetry"
+        }
+      },
+      "required": [
+        "ok",
+        "confidence",
+        "source"
+      ],
+      "title": "Envelope",
+      "type": "object"
+    }
+  },
+  "write_business_memory": {
+    "name": "write_business_memory",
+    "category": "context",
+    "description": "Record an owner statement into business memory. Enforces read-only safety except for memory and audit tables. Detects conflicts with verified records.",
+    "parameters": {
+      "description": "Input parameters for write_business_memory.",
+      "properties": {
+        "key": {
+          "default": "policy.owner_note",
+          "description": "Knowledge topic key (e.g. 'owner.preferred_delivery_time')",
+          "title": "Key",
+          "type": "string"
+        },
+        "value": {
+          "default": "noted",
+          "description": "Value asserted by the owner",
+          "title": "Value",
+          "type": "string"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional category prefix",
+          "title": "Category"
+        },
+        "source": {
+          "default": "owner_statement",
+          "description": "Source of the memory. Only 'owner_statement' is accepted by this tool.",
+          "enum": [
+            "owner_statement",
+            "verified_record"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional confidence override. Defaults to 0.40 for owner statements.",
+          "title": "Confidence"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional explanatory note or context",
+          "title": "Note"
+        }
+      },
+      "title": "WriteBusinessMemoryInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "ToolMeta": {
+          "description": "Execution metadata attached to tool results.",
+          "properties": {
+            "tool": {
+              "description": "Name of the tool executed",
+              "title": "Tool",
+              "type": "string"
+            },
+            "as_of": {
+              "description": "Frozen timestamp as of which the query ran",
+              "title": "As Of",
+              "type": "string"
+            },
+            "period_resolved": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Resolved date window if applicable",
+              "title": "Period Resolved"
+            },
+            "latency_ms": {
+              "default": 0.0,
+              "description": "Execution latency in milliseconds",
+              "title": "Latency Ms",
+              "type": "number"
+            },
+            "queries": {
+              "default": 1,
+              "description": "Number of database queries executed",
+              "title": "Queries",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "tool",
+            "as_of"
+          ],
+          "title": "ToolMeta",
+          "type": "object"
+        }
+      },
+      "description": "Standardized response envelope returned by all tools.",
+      "properties": {
+        "ok": {
+          "description": "Whether the tool succeeded",
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "data": {
+          "additionalProperties": true,
+          "description": "Precomputed structured payload including speech_summary",
+          "title": "Data",
+          "type": "object"
+        },
+        "confidence": {
+          "description": "Calculated confidence score [0.0, 1.0]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "source": {
+          "description": "Origin category: db, estimate, or simulated",
+          "enum": [
+            "db",
+            "estimate",
+            "simulated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "warnings": {
+          "description": "Any warnings, caveat flags, or partial day alerts",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error message if tool failed",
+          "title": "Error"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolMeta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tool execution telemetry"
+        }
+      },
+      "required": [
+        "ok",
+        "confidence",
+        "source"
+      ],
+      "title": "Envelope",
+      "type": "object"
+    }
+  },
+  "analyze_business_performance": {
+    "name": "analyze_business_performance",
+    "category": "analytics",
+    "description": "Analyze revenue, volume, COGS, opex, and net profit over a resolved period (yesterday, last_7d, last_30d, mtd, last_month) with period-over-period comparisons.",
+    "parameters": {
+      "description": "Input parameters for analyze_business_performance.",
+      "properties": {
+        "period": {
+          "default": "last_7d",
+          "description": "Primary period: 'today', 'yesterday', 'last_7d', 'last_30d', 'mtd', 'last_month', or 'YYYY-MM-DD..YYYY-MM-DD'",
+          "title": "Period",
+          "type": "string"
+        },
+        "compare_to": {
+          "default": "previous_period",
+          "description": "Comparison baseline to compute deltas",
+          "enum": [
+            "previous_period",
+            "same_period_last_month",
+            "none"
+          ],
+          "title": "Compare To",
+          "type": "string"
+        }
+      },
+      "title": "AnalyzeBusinessPerformanceInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "ToolMeta": {
+          "description": "Execution metadata attached to tool results.",
+          "properties": {
+            "tool": {
+              "description": "Name of the tool executed",
+              "title": "Tool",
+              "type": "string"
+            },
+            "as_of": {
+              "description": "Frozen timestamp as of which the query ran",
+              "title": "As Of",
+              "type": "string"
+            },
+            "period_resolved": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Resolved date window if applicable",
+              "title": "Period Resolved"
+            },
+            "latency_ms": {
+              "default": 0.0,
+              "description": "Execution latency in milliseconds",
+              "title": "Latency Ms",
+              "type": "number"
+            },
+            "queries": {
+              "default": 1,
+              "description": "Number of database queries executed",
+              "title": "Queries",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "tool",
+            "as_of"
+          ],
+          "title": "ToolMeta",
+          "type": "object"
+        }
+      },
+      "description": "Standardized response envelope returned by all tools.",
+      "properties": {
+        "ok": {
+          "description": "Whether the tool succeeded",
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "data": {
+          "additionalProperties": true,
+          "description": "Precomputed structured payload including speech_summary",
+          "title": "Data",
+          "type": "object"
+        },
+        "confidence": {
+          "description": "Calculated confidence score [0.0, 1.0]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "source": {
+          "description": "Origin category: db, estimate, or simulated",
+          "enum": [
+            "db",
+            "estimate",
+            "simulated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "warnings": {
+          "description": "Any warnings, caveat flags, or partial day alerts",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error message if tool failed",
+          "title": "Error"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolMeta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tool execution telemetry"
+        }
+      },
+      "required": [
+        "ok",
+        "confidence",
+        "source"
+      ],
+      "title": "Envelope",
+      "type": "object"
+    }
+  },
+  "analyze_product_profitability": {
+    "name": "analyze_product_profitability",
+    "category": "analytics",
+    "description": "Calculate unit economics, bill-of-materials cost, contribution margin, and daily breakeven volume for products.",
+    "parameters": {
+      "description": "Input parameters for analyze_product_profitability (single-SKU tiffin economics).",
+      "properties": {},
+      "title": "AnalyzeProductProfitabilityInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "ToolMeta": {
+          "description": "Execution metadata attached to tool results.",
+          "properties": {
+            "tool": {
+              "description": "Name of the tool executed",
+              "title": "Tool",
+              "type": "string"
+            },
+            "as_of": {
+              "description": "Frozen timestamp as of which the query ran",
+              "title": "As Of",
+              "type": "string"
+            },
+            "period_resolved": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Resolved date window if applicable",
+              "title": "Period Resolved"
+            },
+            "latency_ms": {
+              "default": 0.0,
+              "description": "Execution latency in milliseconds",
+              "title": "Latency Ms",
+              "type": "number"
+            },
+            "queries": {
+              "default": 1,
+              "description": "Number of database queries executed",
+              "title": "Queries",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "tool",
+            "as_of"
+          ],
+          "title": "ToolMeta",
+          "type": "object"
+        }
+      },
+      "description": "Standardized response envelope returned by all tools.",
+      "properties": {
+        "ok": {
+          "description": "Whether the tool succeeded",
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "data": {
+          "additionalProperties": true,
+          "description": "Precomputed structured payload including speech_summary",
+          "title": "Data",
+          "type": "object"
+        },
+        "confidence": {
+          "description": "Calculated confidence score [0.0, 1.0]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "source": {
+          "description": "Origin category: db, estimate, or simulated",
+          "enum": [
+            "db",
+            "estimate",
+            "simulated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "warnings": {
+          "description": "Any warnings, caveat flags, or partial day alerts",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error message if tool failed",
+          "title": "Error"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolMeta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tool execution telemetry"
+        }
+      },
+      "required": [
+        "ok",
+        "confidence",
+        "source"
+      ],
+      "title": "Envelope",
+      "type": "object"
+    }
+  },
+  "analyze_cost_trends": {
+    "name": "analyze_cost_trends",
+    "category": "analytics",
+    "description": "Analyze supplier price movements, inflation spikes, and per-unit COGS impact over a period (default last_90d).",
+    "parameters": {
+      "description": "Input parameters for analyze_cost_trends.",
+      "properties": {
+        "window_days": {
+          "default": 90,
+          "description": "Historical observation window in days (default 90 days)",
+          "maximum": 365,
+          "minimum": 7,
+          "title": "Window Days",
+          "type": "integer"
+        }
+      },
+      "title": "AnalyzeCostTrendsInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "ToolMeta": {
+          "description": "Execution metadata attached to tool results.",
+          "properties": {
+            "tool": {
+              "description": "Name of the tool executed",
+              "title": "Tool",
+              "type": "string"
+            },
+            "as_of": {
+              "description": "Frozen timestamp as of which the query ran",
+              "title": "As Of",
+              "type": "string"
+            },
+            "period_resolved": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Resolved date window if applicable",
+              "title": "Period Resolved"
+            },
+            "latency_ms": {
+              "default": 0.0,
+              "description": "Execution latency in milliseconds",
+              "title": "Latency Ms",
+              "type": "number"
+            },
+            "queries": {
+              "default": 1,
+              "description": "Number of database queries executed",
+              "title": "Queries",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "tool",
+            "as_of"
+          ],
+          "title": "ToolMeta",
+          "type": "object"
+        }
+      },
+      "description": "Standardized response envelope returned by all tools.",
+      "properties": {
+        "ok": {
+          "description": "Whether the tool succeeded",
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "data": {
+          "additionalProperties": true,
+          "description": "Precomputed structured payload including speech_summary",
+          "title": "Data",
+          "type": "object"
+        },
+        "confidence": {
+          "description": "Calculated confidence score [0.0, 1.0]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "source": {
+          "description": "Origin category: db, estimate, or simulated",
+          "enum": [
+            "db",
+            "estimate",
+            "simulated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "warnings": {
+          "description": "Any warnings, caveat flags, or partial day alerts",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error message if tool failed",
+          "title": "Error"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolMeta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tool execution telemetry"
+        }
+      },
+      "required": [
+        "ok",
+        "confidence",
+        "source"
+      ],
+      "title": "Envelope",
+      "type": "object"
+    }
+  },
+  "generate_business_report": {
+    "name": "generate_business_report",
+    "category": "analytics",
+    "description": "Synthesize comprehensive markdown business reports (daily_standup, weekly_pnl, monthly_pack, executive_brief) with Obsidian frontmatter, Mermaid charts, and math.",
+    "parameters": {
+      "description": "Input parameters for generate_business_report.",
+      "properties": {
+        "period": {
+          "default": "last_30d",
+          "description": "Report period: 'last_7d', 'last_30d', 'mtd', 'last_month', etc.",
+          "title": "Period",
+          "type": "string"
+        },
+        "format": {
+          "default": "markdown",
+          "description": "Output format: 'json' or 'markdown' (Obsidian-compatible)",
+          "enum": [
+            "json",
+            "markdown"
+          ],
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      "title": "GenerateBusinessReportInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "ToolMeta": {
+          "description": "Execution metadata attached to tool results.",
+          "properties": {
+            "tool": {
+              "description": "Name of the tool executed",
+              "title": "Tool",
+              "type": "string"
+            },
+            "as_of": {
+              "description": "Frozen timestamp as of which the query ran",
+              "title": "As Of",
+              "type": "string"
+            },
+            "period_resolved": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Resolved date window if applicable",
+              "title": "Period Resolved"
+            },
+            "latency_ms": {
+              "default": 0.0,
+              "description": "Execution latency in milliseconds",
+              "title": "Latency Ms",
+              "type": "number"
+            },
+            "queries": {
+              "default": 1,
+              "description": "Number of database queries executed",
+              "title": "Queries",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "tool",
+            "as_of"
+          ],
+          "title": "ToolMeta",
+          "type": "object"
+        }
+      },
+      "description": "Standardized response envelope returned by all tools.",
+      "properties": {
+        "ok": {
+          "description": "Whether the tool succeeded",
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "data": {
+          "additionalProperties": true,
+          "description": "Precomputed structured payload including speech_summary",
+          "title": "Data",
+          "type": "object"
+        },
+        "confidence": {
+          "description": "Calculated confidence score [0.0, 1.0]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "source": {
+          "description": "Origin category: db, estimate, or simulated",
+          "enum": [
+            "db",
+            "estimate",
+            "simulated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "warnings": {
+          "description": "Any warnings, caveat flags, or partial day alerts",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error message if tool failed",
+          "title": "Error"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolMeta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tool execution telemetry"
+        }
+      },
+      "required": [
+        "ok",
+        "confidence",
+        "source"
+      ],
+      "title": "Envelope",
+      "type": "object"
+    }
+  }
+}

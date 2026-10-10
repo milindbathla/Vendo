@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "data": {
+    "key": "supplier.gupta.oil_price_per_l",
+    "stored_value": "130",
+    "stored_source": "owner_statement",
+    "stored_confidence": 0.4,
+    "conflict": true,
+    "conflict_detected": true,
+    "effective_value": "146",
+    "effective_source": "verified_record",
+    "effective_value_unchanged": true,
+    "clarification": "Noted that you stated Rs 130 for supplier.gupta.oil_price_per_l. However, invoice record shows Rs 146. Which rate should I use?",
+    "clarification_question": "Noted that you stated Rs 130 for supplier.gupta.oil_price_per_l. However, invoice record shows Rs 146. Which rate should I use?",
+    "speech_summary": "Noted that you stated Rs 130 for supplier.gupta.oil_price_per_l. However, invoice record shows Rs 146. Which rate should I use?"
+  },
+  "confidence": 0.8,
+  "source": "db",
+  "warnings": [
+    "Conflict detected: Owner statement of '130' differs from verified record '146'."
+  ],
+  "error": null,
+  "meta": {
+    "tool": "write_business_memory",
+    "as_of": "2026-10-10T19:10:00+05:30",
+    "period_resolved": null,
+    "latency_ms": 0.39,
+    "queries": 3
+  }
+}
