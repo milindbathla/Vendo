@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Test artifacts & temporary databases
+*.db-journal
+test_*.db
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
