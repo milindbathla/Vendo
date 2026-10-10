@@ -1,5 +1,15 @@
-# Python standard library is sufficient for core execution.
-# Optional dependencies for visualization / rich tables:
+# Core Gemini Agent & Vector Storage
+google-genai>=2.0.0
+chromadb>=1.5.0
+
+# Backend Web API & MCP Protocols
+fastapi>=0.115.0
+uvicorn>=0.30.0
+pydantic>=2.0.0
+mcp>=1.0.0
+anyio>=4.0.0
+
+# CLI, Analytics & Testing
 matplotlib>=3.8.0
 tabulate>=0.9.0
 pytest>=8.0.0

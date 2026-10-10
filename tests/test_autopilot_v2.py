@@ -226,12 +226,116 @@ def test_10_to_dict_serialization(autopilot):
     d = result.to_dict()
     required_keys = [
         "decision", "user_question", "business", "current_demand",
-        "additional_demand", "projected_demand", "available_inventory",
-        "inventory_shortage", "daily_capacity", "capacity_shortage",
-        "total_cash", "usable_cash", "procurement_units", "procurement_cost",
-        "fulfillable_additional_orders", "unfulfillable_additional_orders",
-        "reason", "recommendations", "explanation_bullets", "voice_response",
-        "tool_trace",
+        "additional_demand", "projected_demand", "fulfilled_demand",
+        "available_inventory", "inventory_shortage", "daily_capacity",
+        "capacity_shortage", "total_cash", "usable_cash", "procurement_units",
+        "procurement_cost", "fulfillable_additional_orders",
+        "unfulfillable_additional_orders", "reason", "recommendations",
+        "explanation_bullets", "voice_response", "tool_trace",
     ]
     for key in required_keys:
         assert key in d, f"Missing key: {key}"
+
+
+# -------------------------------------------------------------------------
+# Test 11: Regression for kitchen capacity scenario (Scenario 3)
+# -------------------------------------------------------------------------
+def test_11_kitchen_capacity_scenario_3_regression(autopilot):
+    """
+    Regression Test for Capacity vs. Inventory Consistency:
+    Current demand = 30, Requested = 20, Capacity = 40, Inventory = 36, Cash = 8000.
+    Expected:
+    - Feasible additional orders = 10 (capacity headroom = 40 - 30 = 10)
+    - Unconstrained projected demand = 50 (30 + 20)
+    - Fulfilled demand target = 40 (30 + 10)
+    - Inventory required for fulfillment = 40 units (NOT 50)
+    - Shortage for fulfillment = 4 units (40 - 36, NOT 14)
+    - Recommended procurement = 4 units (NOT 14)
+    - Decision = ACCEPT_PARTIALLY
+    """
+    result = autopilot.evaluate_opportunity(
+        additional_orders=20.0,
+        current_demand=30.0,
+        current_inventory=36.0,
+        total_cash=8000.0,
+        daily_capacity=40.0,
+        cash_reserve_target=2000.0,
+    )
+
+    assert result.decision == DecisionType.ACCEPT_PARTIALLY
+    assert result.demand_forecast.current_demand == 30.0
+    assert result.demand_forecast.additional_demand == 20.0
+    assert result.demand_forecast.projected_demand == 50.0  # Unconstrained demand preserved
+    assert result.fulfillable_additional_orders == 10.0
+    assert result.unfulfillable_additional_orders == 10.0
+    assert result.fulfilled_demand == 40.0  # Actual intended fulfillment
+
+    # Inventory must be evaluated against fulfilled demand (40), not unconstrained (50)
+    assert result.inventory_status.required_units == 40.0
+    assert result.inventory_status.available_units == 36.0
+    assert result.inventory_status.shortage_units == 4.0
+
+    # Procurement plan must order only the shortage for fulfilled demand
+    assert result.procurement_plan.recommended_procurement_units == 4.0
+    assert result.procurement_plan.estimated_cost == 4.0 * 45.0  # Rs. 180.0
+    assert result.affordability.is_affordable is True
+
+    # Dictionary serialization agrees
+    d = result.to_dict()
+    assert d["projected_demand"] == 50.0
+    assert d["fulfilled_demand"] == 40.0
+    assert d["fulfillable_additional_orders"] == 10.0
+    assert d["inventory_shortage"] == 4.0
+    assert d["procurement_units"] == 4.0
+    assert d["procurement_cost"] == 180.0
+
+
+# -------------------------------------------------------------------------
+# Test 12: Parameterized capacity and fulfillment cases
+# -------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "curr_demand, add_orders, cap, curr_inv, cash, expected_decision, expected_fulfillable, expected_fulfilled, expected_shortage, expected_procure",
+    [
+        # Case A: Sufficient capacity & sufficient inventory -> ACCEPT, 0 procurement
+        (10.0, 10.0, 30.0, 25.0, 5000.0, DecisionType.ACCEPT, 10.0, 20.0, 0.0, 0.0),
+        # Case B: Sufficient capacity & shortage -> ACCEPT_WITH_PROCUREMENT
+        (10.0, 15.0, 30.0, 15.0, 5000.0, DecisionType.ACCEPT_WITH_PROCUREMENT, 15.0, 25.0, 10.0, 10.0),
+        # Case C: Partial capacity, shortage for feasible orders -> ACCEPT_PARTIALLY
+        (25.0, 25.0, 35.0, 25.0, 5000.0, DecisionType.ACCEPT_PARTIALLY, 10.0, 35.0, 10.0, 10.0),
+        # Case D: Partial capacity, but existing stock covers capacity -> ACCEPT_PARTIALLY, 0 procurement
+        (25.0, 25.0, 35.0, 40.0, 5000.0, DecisionType.ACCEPT_PARTIALLY, 10.0, 35.0, 0.0, 0.0),
+        # Case E: Capacity already fully exhausted (current == cap) -> REJECT
+        (40.0, 10.0, 40.0, 40.0, 8000.0, DecisionType.REJECT, 0.0, 40.0, 0.0, 0.0),
+        # Case F: Capacity already exceeded (current > cap) -> REJECT
+        (45.0, 10.0, 40.0, 50.0, 8000.0, DecisionType.REJECT, 0.0, 45.0, 0.0, 0.0),
+        # Case G: Zero additional orders requested -> ACCEPT, 0 fulfillable, 0 procurement
+        (20.0, 0.0, 40.0, 25.0, 5000.0, DecisionType.ACCEPT, 0.0, 20.0, 0.0, 0.0),
+    ],
+)
+def test_12_parameterized_capacity_and_fulfillment(
+    autopilot,
+    curr_demand,
+    add_orders,
+    cap,
+    curr_inv,
+    cash,
+    expected_decision,
+    expected_fulfillable,
+    expected_fulfilled,
+    expected_shortage,
+    expected_procure,
+):
+    """Validates decision engine across diverse capacity, demand, and inventory conditions."""
+    res = autopilot.evaluate_opportunity(
+        additional_orders=add_orders,
+        current_demand=curr_demand,
+        current_inventory=curr_inv,
+        total_cash=cash,
+        daily_capacity=cap,
+        cash_reserve_target=2000.0,
+    )
+    assert res.decision == expected_decision
+    assert res.fulfillable_additional_orders == expected_fulfillable
+    assert res.fulfilled_demand == expected_fulfilled
+    assert res.inventory_status.shortage_units == expected_shortage
+    assert res.procurement_plan.recommended_procurement_units == expected_procure

@@ -117,6 +117,7 @@ class OpportunityDecision:
     procurement_plan: ProcurementPlan
     fulfillable_additional_orders: float
     unfulfillable_additional_orders: float
+    fulfilled_demand: float
     reason: str
     recommendations: List[str]
     explanation_bullets: List[str]
@@ -131,6 +132,7 @@ class OpportunityDecision:
             "current_demand": round(self.demand_forecast.current_demand, 1),
             "additional_demand": round(self.demand_forecast.additional_demand, 1),
             "projected_demand": round(self.demand_forecast.projected_demand, 1),
+            "fulfilled_demand": round(self.fulfilled_demand, 1),
             "available_inventory": round(self.inventory_status.available_units, 1),
             "inventory_shortage": round(self.inventory_status.shortage_units, 1),
             "daily_capacity": round(self.capacity_status.daily_capacity, 1),
@@ -333,7 +335,7 @@ class BusinessAutopilotV2:
             "summary": f"Business: {overview.display_name}, Current: {overview.current_demand:.0f}, Add: {overview.additional_demand:.0f}",
         })
 
-        # Tool 2: Demand Forecast
+        # Tool 2: Demand Forecast (unconstrained opportunity demand)
         demand_fc = self.forecast_demand(curr_demand, additional_orders)
         tool_trace.append({
             "step": 2,
@@ -341,20 +343,29 @@ class BusinessAutopilotV2:
             "summary": f"Expected demand: {demand_fc.projected_demand:.0f} orders (confidence: {demand_fc.confidence})",
         })
 
-        # Tool 3: Inventory Analysis
-        inv_status = self.analyze_inventory(curr_inv, demand_fc.projected_demand)
-        tool_trace.append({
-            "step": 3,
-            "tool": "analyze_inventory",
-            "summary": f"Available: {inv_status.available_units:.0f} units, Required: {inv_status.required_units:.0f}, Shortage: {inv_status.shortage_units:.0f}",
-        })
-
-        # Tool 4: Capacity Analysis
+        # Tool 3: Capacity Status
         cap_status = self.get_capacity_status(cap, demand_fc.projected_demand, curr_demand)
         tool_trace.append({
-            "step": 4,
+            "step": 3,
             "tool": "get_capacity_status",
             "summary": f"Daily Capacity: {cap_status.daily_capacity:.0f}, Projected: {cap_status.projected_demand:.0f}, Shortage: {cap_status.capacity_shortage:.0f}",
+        })
+
+        # ---------------------------------------------------------------------
+        # Production Feasibility Determination
+        # ---------------------------------------------------------------------
+        # Physical kitchen capacity sets the hard ceiling on feasible throughput.
+        effective_capacity = max(0.0, cap)
+        capacity_headroom = max(0.0, effective_capacity - curr_demand)
+        feasible_additional_by_capacity = max(0.0, min(additional_orders, capacity_headroom))
+        intended_fulfillment_demand = curr_demand + feasible_additional_by_capacity
+
+        # Tool 4: Inventory Analysis (evaluated for intended fulfillment demand)
+        inv_status = self.analyze_inventory(curr_inv, intended_fulfillment_demand)
+        tool_trace.append({
+            "step": 4,
+            "tool": "analyze_inventory",
+            "summary": f"Available: {inv_status.available_units:.0f} units, Required: {inv_status.required_units:.0f}, Shortage: {inv_status.shortage_units:.0f}",
         })
 
         # Tool 5: Financial Position
@@ -365,7 +376,7 @@ class BusinessAutopilotV2:
             "summary": f"Cash: Rs.{fin_pos.total_cash:,.2f}, Safety reserve: Rs.{fin_pos.safety_reserve:,.2f}, Usable: Rs.{fin_pos.usable_cash:,.2f}",
         })
 
-        # Tool 6: Purchase Affordability
+        # Tool 6: Purchase Affordability (evaluated for shortage of intended fulfillment)
         affordability = self.analyze_purchase_affordability(
             inv_status.shortage_units,
             self.profile.supplier_unit_cost,
@@ -393,31 +404,38 @@ class BusinessAutopilotV2:
         # ---------------------------------------------------------------------
         # Holistic Decision Synthesis
         # ---------------------------------------------------------------------
-        # 1. Physical capacity limits how many total orders the kitchen can fulfill
-        effective_capacity = max(0.0, cap)
-        max_orders_by_capacity = min(demand_fc.projected_demand, effective_capacity)
-        additional_allowed_by_capacity = max(0.0, min(additional_orders, effective_capacity - curr_demand))
-
-        # 2. Material availability limits how many total orders can be made
-        # (on-hand stock + affordable procurement)
+        # Material availability limits how many units can actually be made:
+        # on-hand inventory + affordable procurement units
         max_orders_by_materials = curr_inv + (
             inv_status.shortage_units if affordability.is_affordable else affordability.max_affordable_units
         )
-        # But we do not procure more than achievable demand
-        achievable_total = min(demand_fc.projected_demand, max_orders_by_capacity, max_orders_by_materials)
+        achievable_total = min(intended_fulfillment_demand, max_orders_by_materials)
         fulfillable_additional = max(0.0, min(additional_orders, achievable_total - curr_demand))
         unfulfillable_additional = max(0.0, additional_orders - fulfillable_additional)
+        fulfilled_demand = curr_demand + fulfillable_additional
 
         # Classify the decision
         explanation_bullets: List[str] = []
         recommendations: List[str] = []
 
-        if fulfillable_additional >= additional_orders:
+        if curr_demand >= cap:
+            # Current committed demand already exhausts capacity
+            decision = DecisionType.REJECT
+            recommendations.append(f"Decline all {additional_orders:.0f} additional orders.")
+            reason = f"Current production capacity ({cap:.0f} orders/day) is already fully utilized by existing demand ({curr_demand:.0f} orders)."
+            explanation_bullets.append(f"Kitchen is operating at 100% capacity ({curr_demand:.0f}/{cap:.0f} orders).")
+            explanation_bullets.append("Accepting any more orders will cause delayed delivery, burnt food, or quality degradation.")
+            voice_response = (
+                f"I recommend declining the {additional_orders:.0f} additional orders. Your kitchen is already at maximum capacity "
+                f"with {curr_demand:.0f} orders scheduled for tomorrow."
+            )
+
+        elif fulfillable_additional >= additional_orders:
             # We can fulfill ALL additional orders
             if inv_status.shortage_units == 0:
                 decision = DecisionType.ACCEPT
                 reason = "Both inventory and daily capacity comfortably accommodate all additional orders without requiring new procurement."
-                explanation_bullets.append(f"Available inventory ({curr_inv:.0f} units) covers all {demand_fc.projected_demand:.0f} projected orders.")
+                explanation_bullets.append(f"Available inventory ({curr_inv:.0f} units) covers all {fulfilled_demand:.0f} projected orders.")
                 explanation_bullets.append(f"Daily capacity of {cap:.0f} orders/day is sufficient.")
                 explanation_bullets.append("No additional working capital expenditure is required.")
                 recommendations.append(f"Accept all {additional_orders:.0f} additional orders.")
@@ -431,7 +449,7 @@ class BusinessAutopilotV2:
                     f"Capacity is sufficient ({cap:.0f} orders/day), but an inventory shortage of "
                     f"{inv_status.shortage_units:.0f} units must be procured for Rs.{proc_plan.estimated_cost:,.2f}."
                 )
-                explanation_bullets.append(f"Daily capacity ({cap:.0f} orders) easily fits {demand_fc.projected_demand:.0f} total orders.")
+                explanation_bullets.append(f"Daily capacity ({cap:.0f} orders) easily fits {fulfilled_demand:.0f} total orders.")
                 explanation_bullets.append(f"Current inventory ({curr_inv:.0f} units) is short by {inv_status.shortage_units:.0f} units.")
                 explanation_bullets.append(
                     f"Procurement cost of Rs.{proc_plan.estimated_cost:,.2f} is fully affordable "
@@ -471,12 +489,18 @@ class BusinessAutopilotV2:
                     f"{cap:.0f} orders/day. Therefore only {fulfillable_additional:.0f} of the additional {additional_orders:.0f} orders can be safely accepted."
                 )
                 explanation_bullets.append(f"Daily capacity ceiling is {cap:.0f} orders (current demand: {curr_demand:.0f}).")
-                explanation_bullets.append(f"Maximum additional orders kitchen can prepare: {additional_allowed_by_capacity:.0f}.")
+                explanation_bullets.append(f"Maximum additional orders kitchen can prepare: {feasible_additional_by_capacity:.0f}.")
                 explanation_bullets.append(f"Procuring ingredients for all {additional_orders:.0f} would produce excess stock that cannot be cooked.")
-                voice_response = (
-                    f"You can safely take {fulfillable_additional:.0f} more orders tomorrow. Your current capacity "
-                    f"limits you to {cap:.0f} total orders. You have enough cash to procure the additional ingredients required."
-                )
+                if proc_plan.recommended_procurement_units > 0:
+                    voice_response = (
+                        f"You can safely take {fulfillable_additional:.0f} more orders tomorrow. Your current capacity "
+                        f"limits you to {cap:.0f} total orders. You have enough cash to procure the additional ingredients required."
+                    )
+                else:
+                    voice_response = (
+                        f"You can safely take {fulfillable_additional:.0f} more orders tomorrow. Your current capacity "
+                        f"limits you to {cap:.0f} total orders. Your current inventory covers these {fulfillable_additional:.0f} orders without extra purchases."
+                    )
             else:
                 # Cash is the binding constraint
                 reason = (
@@ -495,23 +519,13 @@ class BusinessAutopilotV2:
             # CANNOT fulfill ANY additional orders
             decision = DecisionType.REJECT
             recommendations.append(f"Decline all {additional_orders:.0f} additional orders.")
-
-            if curr_demand >= cap:
-                reason = f"Current production capacity ({cap:.0f} orders/day) is already fully utilized by existing demand ({curr_demand:.0f} orders)."
-                explanation_bullets.append(f"Kitchen is operating at 100% capacity ({curr_demand:.0f}/{cap:.0f} orders).")
-                explanation_bullets.append("Accepting any more orders will cause delayed delivery, burnt food, or quality degradation.")
-                voice_response = (
-                    f"I recommend declining the {additional_orders:.0f} additional orders. Your kitchen is already at maximum capacity "
-                    f"with {curr_demand:.0f} orders scheduled for tomorrow."
-                )
-            else:
-                reason = "Working capital is completely exhausted; cannot procure required ingredients while preserving safety reserve."
-                explanation_bullets.append(f"Current inventory ({curr_inv:.0f} units) is already committed to existing {curr_demand:.0f} orders.")
-                explanation_bullets.append(f"Usable cash (Rs.{fin_pos.usable_cash:,.2f}) cannot afford any ingredient purchases.")
-                voice_response = (
-                    f"You should decline the {additional_orders:.0f} additional orders. Your available ingredients are already committed, "
-                    f"and cash reserves cannot support new procurement today."
-                )
+            reason = "Working capital is completely exhausted; cannot procure required ingredients while preserving safety reserve."
+            explanation_bullets.append(f"Current inventory ({curr_inv:.0f} units) is already committed to existing {curr_demand:.0f} orders.")
+            explanation_bullets.append(f"Usable cash (Rs.{fin_pos.usable_cash:,.2f}) cannot afford any ingredient purchases.")
+            voice_response = (
+                f"You should decline the {additional_orders:.0f} additional orders. Your available ingredients are already committed, "
+                f"and cash reserves cannot support new procurement today."
+            )
 
         return OpportunityDecision(
             decision=decision,
@@ -525,6 +539,7 @@ class BusinessAutopilotV2:
             procurement_plan=proc_plan,
             fulfillable_additional_orders=fulfillable_additional,
             unfulfillable_additional_orders=unfulfillable_additional,
+            fulfilled_demand=fulfilled_demand,
             reason=reason,
             recommendations=recommendations,
             explanation_bullets=explanation_bullets,
