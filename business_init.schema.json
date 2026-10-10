@@ -1,0 +1,1190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/alexa-smb/business-init/1.0.json",
+  "title": "Alexa+ Small Business Initialisation Form",
+  "description": "One-time setup data a business owner provides when enabling the Alexa+ business assistant. Field descriptions explain why each value is needed so they can be reused as form help text or voice prompts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "business",
+    "modules",
+    "catalogue"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "business": {
+      "title": "Business profile",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "category",
+        "location",
+        "operating_hours"
+      ],
+      "properties": {
+        "name": {
+          "title": "Business name",
+          "description": "Store or company name. Used for basic identification.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "title": "Business category",
+          "description": "Changes the recommendations and analytics the assistant gives.",
+          "type": "string",
+          "enum": [
+            "bakery",
+            "kirana_grocery",
+            "clothing_apparel",
+            "footwear",
+            "salon_beauty",
+            "restaurant_cafe",
+            "sweets_snacks",
+            "pharmacy",
+            "electronics_mobile",
+            "stationery_books",
+            "hardware_paint",
+            "jewellery",
+            "tailoring_boutique",
+            "repair_services",
+            "fitness_studio",
+            "tuition_coaching",
+            "other"
+          ]
+        },
+        "category_other": {
+          "title": "Describe your business",
+          "description": "Free-text category, required when category is 'other'.",
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "location": {
+          "title": "Business location",
+          "description": "Used for local demand and seasonal context.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "city",
+            "area",
+            "state"
+          ],
+          "properties": {
+            "area": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Locality, market or neighbourhood."
+            },
+            "city": {
+              "type": "string",
+              "minLength": 1
+            },
+            "state": {
+              "type": "string",
+              "minLength": 2
+            },
+            "pincode": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{5}$"
+            },
+            "country": {
+              "type": "string",
+              "const": "IN",
+              "default": "IN"
+            }
+          }
+        },
+        "operating_hours": {
+          "title": "Operating hours",
+          "description": "Needed to interpret sales periods and business activity. A day may have several sessions (for example 09:00-13:00 and 17:00-22:00). A session whose close time is earlier than its open time runs past midnight.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "timezone",
+            "weekly_schedule",
+            "weekly_off"
+          ],
+          "properties": {
+            "timezone": {
+              "type": "string",
+              "default": "Asia/Kolkata"
+            },
+            "weekly_schedule": {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "propertyNames": {
+                "$ref": "#/$defs/weekday"
+              },
+              "patternProperties": {
+                "^(mon|tue|wed|thu|fri|sat|sun)$": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 4,
+                  "items": {
+                    "$ref": "#/$defs/session"
+                  }
+                }
+              }
+            },
+            "weekly_off": {
+              "description": "Days the business is closed. Use an empty array if open all week.",
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/weekday"
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "other"
+              }
+            },
+            "required": [
+              "category"
+            ]
+          },
+          "then": {
+            "required": [
+              "category_other"
+            ]
+          }
+        }
+      ]
+    },
+    "modules": {
+      "title": "What should the assistant help with?",
+      "description": "These switches decide which later sections become mandatory.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "procurement",
+        "finance",
+        "receivables",
+        "amazon_pay_primary"
+      ],
+      "properties": {
+        "procurement": {
+          "type": "boolean",
+          "description": "Supplier comparison and purchase recommendations."
+        },
+        "finance": {
+          "type": "boolean",
+          "description": "Cash-flow and safe-spending reasoning."
+        },
+        "receivables": {
+          "type": "boolean",
+          "description": "Tracking money owed by customers (khata / udhaar)."
+        },
+        "amazon_pay_primary": {
+          "type": "boolean",
+          "description": "Amazon Pay is the main source of payment data."
+        }
+      }
+    },
+    "catalogue": {
+      "title": "Product / service catalogue",
+      "description": "Core reference for all analytics.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/catalogue_item"
+      }
+    },
+    "suppliers": {
+      "title": "Current suppliers",
+      "description": "Needed for procurement decisions. Required when modules.procurement is true.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/supplier"
+      }
+    },
+    "finance": {
+      "title": "Finance",
+      "description": "Required when modules.finance is true.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "opening_balance": {
+          "title": "Opening business balance",
+          "description": "Current usable business funds. Starting point for cash-flow reasoning.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "amount",
+            "as_of"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/money"
+            },
+            "as_of": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        },
+        "recurring_expenses": {
+          "title": "Recurring business expenses",
+          "description": "Strongly recommended. Used to estimate safe spending.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recurring_expense"
+          }
+        },
+        "outstanding_supplier_dues": {
+          "title": "Outstanding supplier dues",
+          "description": "Optional. Prevents overestimating available cash.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "supplier_id",
+              "amount"
+            ],
+            "properties": {
+              "supplier_id": {
+                "$ref": "#/$defs/id"
+              },
+              "amount": {
+                "$ref": "#/$defs/positive_money"
+              },
+              "due_date": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          }
+        }
+      }
+    },
+    "receivables": {
+      "title": "Customer receivables / khata",
+      "description": "Money currently owed by customers. Required when modules.receivables is true (use an empty array if nobody owes anything).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/receivable"
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "amazon_pay": {
+          "$ref": "#/$defs/amazon_pay_connection"
+        }
+      }
+    },
+    "history": {
+      "title": "Historical data",
+      "description": "Optional but very useful: gives meaningful analytics from day one.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sales_import": {
+          "$ref": "#/$defs/sales_import"
+        },
+        "purchase_orders": {
+          "title": "Historical purchase orders",
+          "description": "Past supplier orders and prices. Helps supplier comparison from day one.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/purchase_order"
+          }
+        }
+      }
+    },
+    "customers": {
+      "title": "Existing customer records",
+      "description": "Optional. Helps retention and segmentation immediately.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/customer"
+      }
+    },
+    "marketing_channels": {
+      "title": "Marketing channels used",
+      "description": "Optional. Tells the assistant where marketing can happen.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/marketing_channel"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "$ref": "#/$defs/module_procurement_on"
+      },
+      "then": {
+        "required": [
+          "suppliers"
+        ],
+        "properties": {
+          "suppliers": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "$ref": "#/$defs/module_finance_on"
+      },
+      "then": {
+        "required": [
+          "finance"
+        ],
+        "properties": {
+          "finance": {
+            "required": [
+              "opening_balance"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "$ref": "#/$defs/module_receivables_on"
+      },
+      "then": {
+        "required": [
+          "receivables"
+        ]
+      }
+    },
+    {
+      "if": {
+        "$ref": "#/$defs/module_amazon_pay_primary_on"
+      },
+      "then": {
+        "required": [
+          "integrations"
+        ],
+        "properties": {
+          "integrations": {
+            "required": [
+              "amazon_pay"
+            ],
+            "properties": {
+              "amazon_pay": {
+                "properties": {
+                  "status": {
+                    "const": "connected"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "module_procurement_on": {
+      "required": [
+        "modules"
+      ],
+      "properties": {
+        "modules": {
+          "required": [
+            "procurement"
+          ],
+          "properties": {
+            "procurement": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "module_finance_on": {
+      "required": [
+        "modules"
+      ],
+      "properties": {
+        "modules": {
+          "required": [
+            "finance"
+          ],
+          "properties": {
+            "finance": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "module_receivables_on": {
+      "required": [
+        "modules"
+      ],
+      "properties": {
+        "modules": {
+          "required": [
+            "receivables"
+          ],
+          "properties": {
+            "receivables": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "module_amazon_pay_primary_on": {
+      "required": [
+        "modules"
+      ],
+      "properties": {
+        "modules": {
+          "required": [
+            "amazon_pay_primary"
+          ],
+          "properties": {
+            "amazon_pay_primary": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "money": {
+      "description": "Amount in INR (rupees, up to 2 decimal places).",
+      "type": "number",
+      "minimum": 0
+    },
+    "positive_money": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "quantity": {
+      "type": "number",
+      "minimum": 0
+    },
+    "phone": {
+      "type": "string",
+      "pattern": "^(\\+91)?[6-9][0-9]{9}$"
+    },
+    "weekday": {
+      "type": "string",
+      "enum": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ]
+    },
+    "time_hhmm": {
+      "type": "string",
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "open",
+        "close"
+      ],
+      "properties": {
+        "open": {
+          "$ref": "#/$defs/time_hhmm"
+        },
+        "close": {
+          "$ref": "#/$defs/time_hhmm"
+        }
+      }
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "piece",
+        "kg",
+        "g",
+        "litre",
+        "ml",
+        "dozen",
+        "packet",
+        "box",
+        "metre",
+        "pair",
+        "set",
+        "session",
+        "hour",
+        "service"
+      ]
+    },
+    "catalogue_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "name",
+        "item_type",
+        "category",
+        "unit",
+        "selling_price",
+        "cost_price"
+      ],
+      "properties": {
+        "item_id": {
+          "$ref": "#/$defs/id",
+          "description": "Your SKU or any short unique code."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "item_type": {
+          "type": "string",
+          "enum": [
+            "product",
+            "service"
+          ]
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Your own grouping, e.g. 'Cakes', 'Haircuts'."
+        },
+        "unit": {
+          "$ref": "#/$defs/unit"
+        },
+        "selling_price": {
+          "$ref": "#/$defs/money",
+          "description": "Current selling price per unit. Needed for revenue and pricing analysis."
+        },
+        "cost_price": {
+          "$ref": "#/$defs/money",
+          "description": "Cost to the business per unit. Needed for profit and margin analysis."
+        },
+        "current_stock": {
+          "$ref": "#/$defs/quantity",
+          "description": "Current stock in the item's unit. Required for products."
+        },
+        "reorder_threshold": {
+          "$ref": "#/$defs/quantity",
+          "description": "Optional. Minimum preferred stock level, used before enough sales history exists."
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional, for services."
+        },
+        "active": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "item_type": {
+                "const": "product"
+              }
+            },
+            "required": [
+              "item_type"
+            ]
+          },
+          "then": {
+            "required": [
+              "current_stock"
+            ]
+          }
+        }
+      ]
+    },
+    "price_slab": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min_qty",
+        "unit_price"
+      ],
+      "properties": {
+        "min_qty": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_qty": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0,
+          "description": "Upper bound, inclusive. null or omitted means no upper limit."
+        },
+        "unit_price": {
+          "$ref": "#/$defs/positive_money"
+        }
+      }
+    },
+    "supplier_offer": {
+      "description": "What this supplier sells you for one catalogue item.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "unit_price",
+        "moq",
+        "lead_time_days"
+      ],
+      "properties": {
+        "item_id": {
+          "$ref": "#/$defs/id",
+          "description": "Must match a catalogue item_id."
+        },
+        "unit_price": {
+          "$ref": "#/$defs/positive_money",
+          "description": "Current quote or usual price per unit. Needed for supplier comparison."
+        },
+        "moq": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Minimum order quantity. Needed for feasible purchase recommendations."
+        },
+        "bulk_pricing_slabs": {
+          "description": "Strongly recommended. Example: 1 to 49 units at 100, 50+ at 88.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/price_slab"
+          }
+        },
+        "lead_time_days": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Typical delivery time. Needed to avoid stockouts."
+        },
+        "quote_date": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "payment_terms": {
+      "description": "Optional initially. Needed for cash-flow planning.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "advance",
+            "immediate",
+            "cash_on_delivery",
+            "credit"
+          ]
+        },
+        "credit_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 180
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "credit"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "credit_days"
+            ]
+          }
+        }
+      ]
+    },
+    "supplier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supplier_id",
+        "name",
+        "offers"
+      ],
+      "properties": {
+        "supplier_id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "contact": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "person": {
+              "type": "string"
+            },
+            "phone": {
+              "$ref": "#/$defs/phone"
+            },
+            "whatsapp": {
+              "$ref": "#/$defs/phone"
+            },
+            "email": {
+              "type": "string",
+              "format": "email"
+            }
+          }
+        },
+        "payment_terms": {
+          "$ref": "#/$defs/payment_terms"
+        },
+        "offers": {
+          "description": "Products supplied, with price, MOQ and lead time.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/supplier_offer"
+          }
+        }
+      }
+    },
+    "recurring_expense": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "category",
+        "amount",
+        "frequency"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "rent",
+            "salaries",
+            "utilities",
+            "subscriptions",
+            "loan_emi",
+            "transport",
+            "maintenance",
+            "marketing",
+            "taxes_fees",
+            "other"
+          ]
+        },
+        "amount": {
+          "$ref": "#/$defs/positive_money"
+        },
+        "frequency": {
+          "type": "string",
+          "enum": [
+            "daily",
+            "weekly",
+            "monthly",
+            "quarterly",
+            "yearly"
+          ]
+        },
+        "due_day_of_month": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31
+        }
+      }
+    },
+    "receivable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount_due"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "customer_id"
+          ]
+        },
+        {
+          "required": [
+            "customer_name"
+          ]
+        }
+      ],
+      "properties": {
+        "customer_id": {
+          "$ref": "#/$defs/id"
+        },
+        "customer_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "phone": {
+          "$ref": "#/$defs/phone"
+        },
+        "amount_due": {
+          "$ref": "#/$defs/positive_money"
+        },
+        "since": {
+          "type": "string",
+          "format": "date"
+        },
+        "expected_by": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "amazon_pay_connection": {
+      "title": "Amazon Pay connection",
+      "description": "Result of the merchant authorisation flow. Never put API keys or secrets here: store them server-side and keep only an opaque reference.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "not_connected",
+            "pending",
+            "connected"
+          ]
+        },
+        "merchant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connection_ref": {
+          "type": "string",
+          "minLength": 8,
+          "description": "Opaque handle to server-side stored tokens."
+        },
+        "scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "connected_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "connected"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "merchant_id",
+              "connection_ref",
+              "connected_at"
+            ]
+          }
+        }
+      ]
+    },
+    "sale_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "date",
+        "item_id",
+        "quantity",
+        "unit_price"
+      ],
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "item_id": {
+          "$ref": "#/$defs/id"
+        },
+        "quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "unit_price": {
+          "$ref": "#/$defs/money"
+        },
+        "payment_mode": {
+          "type": "string",
+          "enum": [
+            "cash",
+            "upi",
+            "amazon_pay",
+            "card",
+            "credit_khata",
+            "other"
+          ]
+        },
+        "customer_id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "sales_import": {
+      "title": "Historical sales import",
+      "description": "Ideally the last 30 to 90 days. Provide either a file reference or inline records.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "csv_upload",
+            "excel_upload",
+            "pos_export",
+            "amazon_pay",
+            "billing_app",
+            "manual_entry"
+          ]
+        },
+        "period_start": {
+          "type": "string",
+          "format": "date"
+        },
+        "period_end": {
+          "type": "string",
+          "format": "date"
+        },
+        "file_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Storage key or upload ID of the imported file."
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sale_record"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "available": {
+                "const": true
+              }
+            },
+            "required": [
+              "available"
+            ]
+          },
+          "then": {
+            "required": [
+              "source",
+              "period_start",
+              "period_end"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "file_ref"
+                ]
+              },
+              {
+                "required": [
+                  "records"
+                ],
+                "properties": {
+                  "records": {
+                    "minItems": 1
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "purchase_order": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supplier_id",
+        "order_date",
+        "lines"
+      ],
+      "properties": {
+        "po_id": {
+          "$ref": "#/$defs/id"
+        },
+        "supplier_id": {
+          "$ref": "#/$defs/id"
+        },
+        "order_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "received_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "lines": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "item_id",
+              "quantity",
+              "unit_price"
+            ],
+            "properties": {
+              "item_id": {
+                "$ref": "#/$defs/id"
+              },
+              "quantity": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "unit_price": {
+                "$ref": "#/$defs/money"
+              }
+            }
+          }
+        }
+      }
+    },
+    "customer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "customer_id"
+      ],
+      "properties": {
+        "customer_id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "phone": {
+          "$ref": "#/$defs/phone"
+        },
+        "first_purchase_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "marketing_consent": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the customer agreed to receive promotional messages."
+        },
+        "purchase_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "date",
+              "amount"
+            ],
+            "properties": {
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "item_id": {
+                "$ref": "#/$defs/id"
+              },
+              "quantity": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "amount": {
+                "$ref": "#/$defs/money"
+              }
+            }
+          }
+        }
+      }
+    },
+    "marketing_channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channel"
+      ],
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": [
+            "whatsapp",
+            "whatsapp_business",
+            "instagram",
+            "facebook",
+            "google_business_profile",
+            "youtube",
+            "website",
+            "sms",
+            "local_print",
+            "other"
+          ]
+        },
+        "handle_or_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "active": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    }
+  }
+}
