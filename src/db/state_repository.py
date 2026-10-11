@@ -3,7 +3,7 @@ Business State Repository
 =========================
 Reads and writes cash balance and inventory per business_type.
 
-The business_state table is seeded from data/business_profiles.json via
+The autopilot_business_state table is seeded from data/business_profiles.json via
 seed_business_state().  After a purchase is executed the caller should
 call update_cash_after_purchase() so the stored balance reflects reality.
 """
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class BusinessStateRepository:
     """
-    Thin repository for the business_state table.
+    Thin repository for the autopilot_business_state table.
     All methods open and close their own connection for file-backed DBs,
     or use a shared connection for :memory: databases.
     """
@@ -62,7 +62,7 @@ class BusinessStateRepository:
         conn = self._conn()
         try:
             row = conn.execute(
-                "SELECT * FROM business_state WHERE business_type = ?",
+                "SELECT * FROM autopilot_business_state WHERE business_type = ?",
                 (business_type,),
             ).fetchone()
             return dict(row) if row else None
@@ -83,7 +83,7 @@ class BusinessStateRepository:
         try:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
-                "SELECT cash_balance FROM business_state WHERE business_type = ?",
+                "SELECT cash_balance FROM autopilot_business_state WHERE business_type = ?",
                 (business_type,),
             ).fetchone()
             if row is None:
@@ -94,7 +94,7 @@ class BusinessStateRepository:
                 return None
             new_balance = row["cash_balance"] - amount_deducted
             conn.execute(
-                "UPDATE business_state "
+                "UPDATE autopilot_business_state "
                 "SET cash_balance = ?, last_updated = strftime('%Y-%m-%dT%H:%M:%SZ','now') "
                 "WHERE business_type = ?",
                 (new_balance, business_type),
@@ -120,7 +120,7 @@ class BusinessStateRepository:
         try:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
-                "SELECT inventory_units FROM business_state WHERE business_type = ?",
+                "SELECT inventory_units FROM autopilot_business_state WHERE business_type = ?",
                 (business_type,),
             ).fetchone()
             if row is None:
@@ -128,7 +128,7 @@ class BusinessStateRepository:
                 return None
             new_inv = row["inventory_units"] + delta
             conn.execute(
-                "UPDATE business_state "
+                "UPDATE autopilot_business_state "
                 "SET inventory_units = ?, last_updated = strftime('%Y-%m-%dT%H:%M:%SZ','now') "
                 "WHERE business_type = ?",
                 (new_inv, business_type),

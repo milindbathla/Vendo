@@ -13,6 +13,17 @@ from src.server.mcp_server import create_mcp_server
 from src.decision.approval_service import PurchaseApprovalService
 
 
+def _unwrap(res):
+    """Unwrap a FastMCP ``call_tool`` result.
+
+    FastMCP returns a ``(content_blocks, structured_result)`` tuple. Every tool
+    in this server returns a ``dict``, which the SDK surfaces as
+    ``{"result": {...}}`` in the structured payload.
+    """
+    _content, structured = res
+    return structured["result"]
+
+
 @pytest.fixture
 def mcp_server():
     approvals = PurchaseApprovalService()
@@ -45,8 +56,7 @@ async def test_1_mcp_tools_registration(mcp_server):
 async def test_2_call_get_business_state(mcp_server):
     """Verifies calling get_business_state tool via MCP protocol."""
     res = await mcp_server.call_tool("get_business_state", {"business_type": "home_tiffin"})
-    assert not res.is_error
-    data = json.loads(res.content[0].text)
+    data = _unwrap(res)
     assert data["business_type"] == "home_tiffin"
     assert data["selling_price"] == 95.0
     assert "simulation_notice" in data
@@ -66,8 +76,7 @@ async def test_3_call_evaluate_order_opportunity(mcp_server):
             "daily_capacity": 40.0,
         },
     )
-    assert not res.is_error
-    data = json.loads(res.content[0].text)
+    data = _unwrap(res)
     assert data["decision"] == "ACCEPT_WITH_PROCUREMENT"
     assert "voice_response" in data
     assert len(data["tool_trace"]) >= 5
@@ -97,8 +106,7 @@ async def test_4_mcp_two_phase_purchase_lifecycle(mcp_server):
             "explanation": "Procuring 5L oil for tiffin prep",
         },
     )
-    assert not create_res.is_error
-    created_data = json.loads(create_res.content[0].text)
+    created_data = _unwrap(create_res)
     plan_id = created_data["plan"]["plan_id"]
     assert created_data["plan"]["status"] == "PENDING_APPROVAL"
 
@@ -107,8 +115,7 @@ async def test_4_mcp_two_phase_purchase_lifecycle(mcp_server):
         "execute_purchase_plan",
         {"plan_id": plan_id, "current_cash": 8000.0, "safety_reserve": 2000.0},
     )
-    assert not exec_fail_res.is_error
-    fail_data = json.loads(exec_fail_res.content[0].text)
+    fail_data = _unwrap(exec_fail_res)
     assert fail_data["status"] == "ERROR"
     assert "PENDING_APPROVAL" in fail_data["error"]
 
@@ -117,8 +124,7 @@ async def test_4_mcp_two_phase_purchase_lifecycle(mcp_server):
         "confirm_purchase_plan",
         {"plan_id": plan_id, "decision": "APPROVE"},
     )
-    assert not confirm_res.is_error
-    confirmed_data = json.loads(confirm_res.content[0].text)
+    confirmed_data = _unwrap(confirm_res)
     assert confirmed_data["plan_status"] == "APPROVED"
 
     # 4. Execute confirmed plan -> SUCCEEDS
@@ -126,8 +132,7 @@ async def test_4_mcp_two_phase_purchase_lifecycle(mcp_server):
         "execute_purchase_plan",
         {"plan_id": plan_id, "current_cash": 8000.0, "safety_reserve": 2000.0},
     )
-    assert not exec_res.is_error
-    exec_data = json.loads(exec_res.content[0].text)
+    exec_data = _unwrap(exec_res)
     assert exec_data["status"] == "EXECUTION_COMPLETE"
     assert exec_data["receipt"]["status"] == "SIMULATED_ORDER_PLACED"
     assert exec_data["receipt"]["cash_after"] == 7400.0

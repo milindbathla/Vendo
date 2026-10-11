@@ -10,10 +10,9 @@ def resolve_db_path(configured_path: Optional[str] = None) -> str:
 
     Order of precedence:
     1. Explicitly supplied path argument
-    2. Environment variable BUSINESS_MCP_DB_PATH or DEMO_DB_PATH
+    2. Environment variable DATABASE_PATH, BUSINESS_MCP_DB_PATH or DEMO_DB_PATH
     3. Agent local data/demo.db
     4. Repository-wide data/demo.db
-    5. Development download /Users/amar/Downloads/demo.db
     """
     if configured_path:
         p = Path(configured_path).resolve()
@@ -21,7 +20,11 @@ def resolve_db_path(configured_path: Optional[str] = None) -> str:
             return str(p)
         raise FileNotFoundError(f"Configured database path does not exist: {configured_path}")
 
-    env_path = os.environ.get("BUSINESS_MCP_DB_PATH") or os.environ.get("DEMO_DB_PATH")
+    env_path = (
+        os.environ.get("DATABASE_PATH")
+        or os.environ.get("BUSINESS_MCP_DB_PATH")
+        or os.environ.get("DEMO_DB_PATH")
+    )
     if env_path:
         p = Path(env_path).resolve()
         if p.exists():
@@ -40,11 +43,7 @@ def resolve_db_path(configured_path: Optional[str] = None) -> str:
     if repo_data_path.exists():
         return str(repo_data_path)
 
-    # 3. Fallback to system download
-    fallback_download = Path("/Users/amar/Downloads/demo.db")
-    if fallback_download.exists():
-        return str(fallback_download)
-
     raise FileNotFoundError(
-        "Could not find demo.db. Checked local data/demo.db, repo data/demo.db, and /Users/amar/Downloads/demo.db"
+        "Could not find demo.db. Checked DATABASE_PATH/BUSINESS_MCP_DB_PATH/DEMO_DB_PATH, "
+        "agent-local data/demo.db, and repo-wide data/demo.db."
     )

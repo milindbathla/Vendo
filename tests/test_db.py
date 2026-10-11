@@ -111,12 +111,12 @@ class TestSchemaInitialisation:
         }
         conn.close()
         expected = {
-            "schema_migrations",
-            "business_state",
-            "purchase_plans",
-            "plan_items",
-            "audit_events",
-            "execution_receipts",
+            "autopilot_schema_migrations",
+            "autopilot_business_state",
+            "autopilot_purchase_plans",
+            "autopilot_plan_items",
+            "autopilot_audit_events",
+            "autopilot_execution_receipts",
         }
         assert expected.issubset(tables)
 
@@ -126,7 +126,7 @@ class TestSchemaInitialisation:
         initialize_database(db_path)   # second call must be safe
         conn = get_connection(db_path)
         version = conn.execute(
-            "SELECT version FROM schema_migrations"
+            "SELECT version FROM autopilot_schema_migrations"
         ).fetchone()["version"]
         conn.close()
         assert version == 1
@@ -135,7 +135,7 @@ class TestSchemaInitialisation:
         """Schema version 1 is recorded after initialisation."""
         initialize_database(db_path)
         conn = get_connection(db_path)
-        row = conn.execute("SELECT version FROM schema_migrations").fetchone()
+        row = conn.execute("SELECT version FROM autopilot_schema_migrations").fetchone()
         conn.close()
         assert row is not None
         assert row["version"] == 1
@@ -270,7 +270,7 @@ class TestApprovalAndRejection:
         repo.confirm_plan(plan.plan_id, "APPROVE")
         conn = get_connection(init_db)
         events = conn.execute(
-            "SELECT event_type FROM audit_events WHERE plan_id=?", (plan.plan_id,)
+            "SELECT event_type FROM autopilot_audit_events WHERE plan_id=?", (plan.plan_id,)
         ).fetchall()
         conn.close()
         event_types = [e["event_type"] for e in events]
@@ -330,7 +330,7 @@ class TestSuccessfulExecution:
 
         conn = get_connection(init_db)
         row = conn.execute(
-            "SELECT * FROM execution_receipts WHERE plan_id=?", (plan.plan_id,)
+            "SELECT * FROM autopilot_execution_receipts WHERE plan_id=?", (plan.plan_id,)
         ).fetchone()
         conn.close()
         assert row is not None

@@ -59,3 +59,9 @@ data/*.sqlite3
 data/*.sqlite3-wal
 data/*.sqlite3-shm
 data/chroma/
+
+# Exceptions: the committed, seeded demo databases are the canonical data
+# source and must be present on a fresh clone (the specialist agents resolve
+# to repo-wide data/demo.db). Their -wal/-shm sidecars remain ignored above.
+!data/demo.db
+!data/business.db

@@ -143,7 +143,7 @@ class PlanRepository:
     def _load_items(self, conn: sqlite3.Connection, plan_id: str) -> List[PlanItemRow]:
         rows = conn.execute(
             "SELECT ingredient_name, display_name, quantity, unit, unit_price, total_price "
-            "FROM plan_items WHERE plan_id = ? ORDER BY id",
+            "FROM autopilot_plan_items WHERE plan_id = ? ORDER BY id",
             (plan_id,),
         ).fetchall()
         return [
@@ -162,7 +162,7 @@ class PlanRepository:
         self, conn: sqlite3.Connection, plan_id: str
     ) -> Optional[Dict[str, Any]]:
         row = conn.execute(
-            "SELECT * FROM execution_receipts WHERE plan_id = ?", (plan_id,)
+            "SELECT * FROM autopilot_execution_receipts WHERE plan_id = ?", (plan_id,)
         ).fetchone()
         if row is None:
             return None
@@ -196,7 +196,7 @@ class PlanRepository:
         data: Dict[str, Any],
     ) -> None:
         conn.execute(
-            "INSERT INTO audit_events (plan_id, event_type, event_data) VALUES (?, ?, ?)",
+            "INSERT INTO autopilot_audit_events (plan_id, event_type, event_data) VALUES (?, ?, ?)",
             (plan_id, event_type, json.dumps(data)),
         )
 
@@ -220,7 +220,7 @@ class PlanRepository:
             conn.execute("BEGIN")
             conn.execute(
                 """
-                INSERT INTO purchase_plans
+                INSERT INTO autopilot_purchase_plans
                     (plan_id, supplier_id, supplier_name, total_cost, status,
                      explanation, created_at)
                 VALUES (?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?)
@@ -230,7 +230,7 @@ class PlanRepository:
             for it in items:
                 conn.execute(
                     """
-                    INSERT INTO plan_items
+                    INSERT INTO autopilot_plan_items
                         (plan_id, ingredient_name, display_name,
                          quantity, unit, unit_price, total_price)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -259,7 +259,7 @@ class PlanRepository:
         conn = self._conn()
         try:
             row = conn.execute(
-                "SELECT * FROM purchase_plans WHERE plan_id = ?", (plan_id,)
+                "SELECT * FROM autopilot_purchase_plans WHERE plan_id = ?", (plan_id,)
             ).fetchone()
             if row is None:
                 raise KeyError(plan_id)
@@ -272,7 +272,7 @@ class PlanRepository:
         conn = self._conn()
         try:
             rows = conn.execute(
-                "SELECT * FROM purchase_plans ORDER BY created_at DESC"
+                "SELECT * FROM autopilot_purchase_plans ORDER BY created_at DESC"
             ).fetchall()
             return [self._row_to_plan(conn, r) for r in rows]
         finally:
@@ -296,7 +296,7 @@ class PlanRepository:
         try:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
-                "SELECT status FROM purchase_plans WHERE plan_id = ?", (plan_id,)
+                "SELECT status FROM autopilot_purchase_plans WHERE plan_id = ?", (plan_id,)
             ).fetchone()
             if row is None:
                 conn.execute("ROLLBACK")
@@ -308,7 +308,7 @@ class PlanRepository:
                     f"Only PENDING_APPROVAL plans can be confirmed."
                 )
             conn.execute(
-                "UPDATE purchase_plans SET status=?, owner_decision=?, confirmed_at=? WHERE plan_id=?",
+                "UPDATE autopilot_purchase_plans SET status=?, owner_decision=?, confirmed_at=? WHERE plan_id=?",
                 (new_status.value, owner_decision, now, plan_id),
             )
             self._audit(conn, plan_id, owner_decision, {"decision": owner_decision})
@@ -361,7 +361,7 @@ class PlanRepository:
             conn.execute("BEGIN IMMEDIATE")
 
             row = conn.execute(
-                "SELECT * FROM purchase_plans WHERE plan_id = ?", (plan_id,)
+                "SELECT * FROM autopilot_purchase_plans WHERE plan_id = ?", (plan_id,)
             ).fetchone()
             if row is None:
                 conn.execute("ROLLBACK")
@@ -386,14 +386,14 @@ class PlanRepository:
 
             # Transition to EXECUTED
             conn.execute(
-                "UPDATE purchase_plans SET status='EXECUTED', executed_at=? WHERE plan_id=?",
+                "UPDATE autopilot_purchase_plans SET status='EXECUTED', executed_at=? WHERE plan_id=?",
                 (now, plan_id),
             )
 
             order_id   = f"SIM-ORD-{uuid.uuid4().hex[:6].upper()}"
             cash_after = current_cash - total_cost
             items_count = conn.execute(
-                "SELECT COUNT(*) FROM plan_items WHERE plan_id=?", (plan_id,)
+                "SELECT COUNT(*) FROM autopilot_plan_items WHERE plan_id=?", (plan_id,)
             ).fetchone()[0]
 
             receipt = {
@@ -413,7 +413,7 @@ class PlanRepository:
 
             conn.execute(
                 """
-                INSERT OR REPLACE INTO execution_receipts
+                INSERT OR REPLACE INTO autopilot_execution_receipts
                     (plan_id, order_id, supplier_id, supplier_name,
                      items_count, amount_paid, cash_before, cash_after,
                      safety_reserve, status, estimated_delivery, disclaimer)
@@ -434,11 +434,11 @@ class PlanRepository:
                     "Deterministic simulation. No real money or purchase executed.",
                 ),
             )
-            # Atomically update business_state in the exact same transaction if business_type is provided
+            # Atomically update autopilot_business_state in the exact same transaction if business_type is provided
             if business_type:
                 conn.execute(
                     """
-                    UPDATE business_state
+                    UPDATE autopilot_business_state
                     SET cash_balance = cash_balance - ?,
                         last_updated = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
                     WHERE business_type = ?

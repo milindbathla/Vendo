@@ -14,9 +14,11 @@ Serves:
 Persistence
 -----------
 The database path is read from the DATABASE_PATH environment variable,
-falling back to data/business_autopilot.sqlite3.  On startup the schema
-is initialised (idempotent) and business state is seeded from
-data/business_profiles.json (INSERT OR IGNORE — live data is never reset).
+falling back to the canonical data/demo.db.  On startup the autopilot's own
+runtime tables (autopilot_*) are initialised (idempotent, additive — the
+teammate-owned domain tables are never touched) and the autopilot_business_state
+table is seeded from data/business_profiles.json (INSERT OR IGNORE — live data
+is never reset).
 """
 from dataclasses import asdict
 import json

@@ -10,7 +10,7 @@ Design notes
   which is appropriate for a single-process FastAPI server.
 * check_same_thread=False – FastAPI/Starlette dispatches requests on a
   thread pool; SQLite handles serialisation via its own locking.
-* Schema versioning – a `schema_migrations` table tracks applied versions.
+* Schema versioning – a `autopilot_schema_migrations` table tracks applied versions.
   initialize_database() is idempotent: safe to call on every startup.
 * Seeding – seed_business_state() uses INSERT OR IGNORE so it never
   overwrites live data if the record already exists.
@@ -27,7 +27,10 @@ logger = logging.getLogger(__name__)
 # ── Default paths ──────────────────────────────────────────────────────────────
 # Resolved relative to the project root at import time.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_DB_PATH: str = str(_PROJECT_ROOT / "data" / "business_autopilot.sqlite3")
+# Canonical database: the seeded demo.db shared with the specialist agents.
+# The autopilot's own runtime tables (autopilot_*) are created additively here
+# and never collide with the teammate-owned domain tables.
+DEFAULT_DB_PATH: str = str(_PROJECT_ROOT / "data" / "demo.db")
 _PROFILES_JSON: Path = _PROJECT_ROOT / "data" / "business_profiles.json"
 
 # Current schema version – bump this integer when DDL changes.
@@ -36,14 +39,14 @@ _CURRENT_SCHEMA_VERSION = 1
 # ── DDL ────────────────────────────────────────────────────────────────────────
 _DDL_V1 = """
 -- Schema migration tracker
-CREATE TABLE IF NOT EXISTS schema_migrations (
+CREATE TABLE IF NOT EXISTS autopilot_schema_migrations (
     version     INTEGER PRIMARY KEY,
     applied_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 -- Live business state per business_type (cash, inventory)
 -- Seeded from data/business_profiles.json; updated when a purchase executes.
-CREATE TABLE IF NOT EXISTS business_state (
+CREATE TABLE IF NOT EXISTS autopilot_business_state (
     business_type   TEXT    PRIMARY KEY,
     display_name    TEXT    NOT NULL,
     cash_balance    REAL    NOT NULL,   -- Rs, floating-point; sufficient for demo scale
@@ -53,7 +56,7 @@ CREATE TABLE IF NOT EXISTS business_state (
 );
 
 -- Purchase plan header – one row per plan
-CREATE TABLE IF NOT EXISTS purchase_plans (
+CREATE TABLE IF NOT EXISTS autopilot_purchase_plans (
     plan_id         TEXT    PRIMARY KEY,
     supplier_id     TEXT    NOT NULL,
     supplier_name   TEXT    NOT NULL,
@@ -68,9 +71,9 @@ CREATE TABLE IF NOT EXISTS purchase_plans (
 );
 
 -- Line items belonging to a plan
-CREATE TABLE IF NOT EXISTS plan_items (
+CREATE TABLE IF NOT EXISTS autopilot_plan_items (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    plan_id         TEXT    NOT NULL REFERENCES purchase_plans(plan_id) ON DELETE CASCADE,
+    plan_id         TEXT    NOT NULL REFERENCES autopilot_purchase_plans(plan_id) ON DELETE CASCADE,
     ingredient_name TEXT    NOT NULL,
     display_name    TEXT    NOT NULL,
     quantity        REAL    NOT NULL CHECK(quantity >= 0),
@@ -80,7 +83,7 @@ CREATE TABLE IF NOT EXISTS plan_items (
 );
 
 -- Audit trail – append-only; never UPDATE or DELETE rows here
-CREATE TABLE IF NOT EXISTS audit_events (
+CREATE TABLE IF NOT EXISTS autopilot_audit_events (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     plan_id     TEXT    NOT NULL,
     event_type  TEXT    NOT NULL,   -- 'CREATED', 'APPROVED', 'REJECTED', 'EXECUTED', 'EXEC_FAILED'
@@ -89,8 +92,8 @@ CREATE TABLE IF NOT EXISTS audit_events (
 );
 
 -- Execution receipt – one row per successfully executed plan
-CREATE TABLE IF NOT EXISTS execution_receipts (
-    plan_id                 TEXT    PRIMARY KEY REFERENCES purchase_plans(plan_id),
+CREATE TABLE IF NOT EXISTS autopilot_execution_receipts (
+    plan_id                 TEXT    PRIMARY KEY REFERENCES autopilot_purchase_plans(plan_id),
     order_id                TEXT    NOT NULL,
     supplier_id             TEXT    NOT NULL,
     supplier_name           TEXT    NOT NULL,
@@ -105,8 +108,8 @@ CREATE TABLE IF NOT EXISTS execution_receipts (
     executed_at             TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_plan_items_plan_id  ON plan_items(plan_id);
-CREATE INDEX IF NOT EXISTS idx_audit_events_plan   ON audit_events(plan_id);
+CREATE INDEX IF NOT EXISTS idx_plan_items_plan_id  ON autopilot_plan_items(plan_id);
+CREATE INDEX IF NOT EXISTS idx_audit_events_plan   ON autopilot_audit_events(plan_id);
 """
 
 
@@ -157,7 +160,7 @@ def initialize_database(
     try:
         conn.executescript(_DDL_V1)
         conn.execute(
-            "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)",
+            "INSERT OR IGNORE INTO autopilot_schema_migrations (version) VALUES (?)",
             (_CURRENT_SCHEMA_VERSION,),
         )
         conn.commit()
@@ -176,7 +179,7 @@ def seed_business_state(
     conn: Optional[sqlite3.Connection] = None,
 ) -> int:
     """
-    Seeds the `business_state` table from *profiles_path* (defaults to
+    Seeds the `autopilot_business_state` table from *profiles_path* (defaults to
     ``data/business_profiles.json``).
 
     Uses INSERT OR IGNORE – existing rows are never overwritten.  This means
@@ -205,7 +208,7 @@ def seed_business_state(
         for btype, prof in profiles.items():
             cur = conn.execute(
                 """
-                INSERT OR IGNORE INTO business_state
+                INSERT OR IGNORE INTO autopilot_business_state
                     (business_type, display_name, cash_balance, inventory_units, safety_reserve)
                 VALUES (?, ?, ?, ?, ?)
                 """,

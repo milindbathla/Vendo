@@ -54,6 +54,21 @@ See [`document_reconciliation_agent/README.md`](document_reconciliation_agent/RE
 
 ---
 
+## Standalone Prototype Agents (not yet integrated)
+
+The following two modules are **self-contained prototypes**. They run entirely
+on deterministic, in-memory data, are **not wired into the MCP server or the
+shared `demo.db`**, and overlap with existing logic in `src/` (`finance_agent`
+mirrors `src/engine/finance.py`; `supplier_intelligence` mirrors
+`src/services/supplier_simulator.py`). They are documented here for visibility
+and are candidates for either consolidation into `src/` or promotion into full
+`demo.db`-backed specialist agents.
+
+- **`finance_agent/`** — cash/P&L/affordability/what-if projections (in-memory).
+- **`supplier_intelligence/`** — supplier profiling, comparison, and scoring (in-memory).
+
+---
+
 ## Agent Responsibilities
 
 Each specialist agent focuses on a distinct business capability. Their integration should respect existing database schemas, tool contracts, authorization requirements, and audit controls. Capabilities that depend on unavailable data or integrations must be reported as unsupported or pending review rather than assumed to have succeeded.

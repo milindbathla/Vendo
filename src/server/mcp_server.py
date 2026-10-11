@@ -11,7 +11,7 @@ from dataclasses import asdict
 import json
 from typing import Dict, Any, List, Optional
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 
 from src.models.business import BusinessProfile
 from src.models.recipe import TiffinRecipeManager, STANDARD_TIFFIN_RECIPE
@@ -37,13 +37,15 @@ from src.services.supplier_simulator import (
 def create_mcp_server(
     approval_service: Optional[PurchaseApprovalService] = None,
     profiles: Optional[Dict[str, BusinessProfile]] = None,
-) -> MCPServer:
+) -> FastMCP:
     """Factory to create and configure the Alexa Business Autopilot MCP Server."""
 
-    server = MCPServer(
+    server = FastMCP(
         name="alexa-business-autopilot",
-        description="Voice-first operating layer & MCP server for Indian micro-enterprises.",
-        version="1.0.0",
+        instructions=(
+            "Voice-first operating layer & MCP server for Indian micro-enterprises. "
+            "Version 1.0.0."
+        ),
     )
 
     business_profiles = profiles or load_business_profiles()

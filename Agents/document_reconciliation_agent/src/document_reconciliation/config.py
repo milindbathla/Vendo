@@ -10,7 +10,7 @@ def resolve_db_path(configured_path: Optional[str] = None) -> str:
 
     Order of precedence:
     1. Explicitly supplied path argument
-    2. Environment variable BUSINESS_MCP_DB_PATH or DEMO_DB_PATH
+    2. Environment variable DATABASE_PATH, BUSINESS_MCP_DB_PATH or DEMO_DB_PATH
     3. Agent-local data/demo.db
     4. Repo-wide data/demo.db
     """
@@ -20,7 +20,11 @@ def resolve_db_path(configured_path: Optional[str] = None) -> str:
             return str(p)
         raise FileNotFoundError(f"Configured database path does not exist: {configured_path}")
 
-    env_path = os.environ.get("BUSINESS_MCP_DB_PATH") or os.environ.get("DEMO_DB_PATH")
+    env_path = (
+        os.environ.get("DATABASE_PATH")
+        or os.environ.get("BUSINESS_MCP_DB_PATH")
+        or os.environ.get("DEMO_DB_PATH")
+    )
     if env_path:
         p = Path(env_path).resolve()
         if p.exists():
