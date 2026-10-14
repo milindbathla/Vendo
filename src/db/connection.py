@@ -34,7 +34,7 @@ DEFAULT_DB_PATH: str = str(_PROJECT_ROOT / "data" / "demo.db")
 _PROFILES_JSON: Path = _PROJECT_ROOT / "data" / "business_profiles.json"
 
 # Current schema version – bump this integer when DDL changes.
-_CURRENT_SCHEMA_VERSION = 1
+_CURRENT_SCHEMA_VERSION = 2
 
 # ── DDL ────────────────────────────────────────────────────────────────────────
 _DDL_V1 = """
@@ -112,6 +112,24 @@ CREATE INDEX IF NOT EXISTS idx_plan_items_plan_id  ON autopilot_plan_items(plan_
 CREATE INDEX IF NOT EXISTS idx_audit_events_plan   ON autopilot_audit_events(plan_id);
 """
 
+_DDL_V2 = """
+-- External provider connections (Google Places, Zoho Books, etc.)
+CREATE TABLE IF NOT EXISTS autopilot_provider_connections (
+    provider        TEXT    NOT NULL,
+    business_type   TEXT    NOT NULL DEFAULT 'home_tiffin',
+    org_id          TEXT,
+    api_domain      TEXT,
+    scopes          TEXT,
+    status          TEXT    NOT NULL DEFAULT 'disconnected', -- 'connected', 'mock', 'disconnected'
+    last_synced_at  TEXT,
+    metadata        TEXT,   -- JSON blob for non-sensitive connection details
+    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    PRIMARY KEY (provider, business_type)
+);
+CREATE INDEX IF NOT EXISTS idx_provider_connections ON autopilot_provider_connections(provider, business_type);
+"""
+
 
 # ── Connection factory ─────────────────────────────────────────────────────────
 
@@ -161,11 +179,92 @@ def initialize_database(
         conn.executescript(_DDL_V1)
         conn.execute(
             "INSERT OR IGNORE INTO autopilot_schema_migrations (version) VALUES (?)",
-            (_CURRENT_SCHEMA_VERSION,),
+            (1,),
+        )
+        conn.executescript(_DDL_V2)
+        conn.execute(
+            "INSERT OR IGNORE INTO autopilot_schema_migrations (version) VALUES (?)",
+            (2,),
         )
         conn.commit()
         logger.info("Database schema initialised at %s (version %d)", db_path, _CURRENT_SCHEMA_VERSION)
         return conn
+    finally:
+        if should_close:
+            conn.close()
+
+
+def upsert_provider_connection(
+    provider: str,
+    business_type: str = "home_tiffin",
+    status: str = "connected",
+    org_id: Optional[str] = None,
+    api_domain: Optional[str] = None,
+    scopes: Optional[str] = None,
+    last_synced_at: Optional[str] = None,
+    metadata: Optional[dict] = None,
+    db_path: str = DEFAULT_DB_PATH,
+    conn: Optional[sqlite3.Connection] = None,
+) -> None:
+    """Records or updates external provider connection state (without storing secrets)."""
+    meta_json = json.dumps(metadata) if metadata else None
+    should_close = False
+    if conn is None:
+        conn = get_connection(db_path)
+        should_close = True
+    try:
+        conn.execute(
+            """
+            INSERT INTO autopilot_provider_connections
+                (provider, business_type, org_id, api_domain, scopes, status, last_synced_at, metadata, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            ON CONFLICT(provider, business_type) DO UPDATE SET
+                org_id = COALESCE(excluded.org_id, autopilot_provider_connections.org_id),
+                api_domain = COALESCE(excluded.api_domain, autopilot_provider_connections.api_domain),
+                scopes = COALESCE(excluded.scopes, autopilot_provider_connections.scopes),
+                status = excluded.status,
+                last_synced_at = COALESCE(excluded.last_synced_at, autopilot_provider_connections.last_synced_at),
+                metadata = COALESCE(excluded.metadata, autopilot_provider_connections.metadata),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            """,
+            (provider, business_type, org_id, api_domain, scopes, status, last_synced_at, meta_json),
+        )
+        conn.commit()
+    finally:
+        if should_close:
+            conn.close()
+
+
+def get_provider_connection(
+    provider: str,
+    business_type: str = "home_tiffin",
+    db_path: str = DEFAULT_DB_PATH,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Optional[dict]:
+    """Retrieves external provider connection state for a business."""
+    should_close = False
+    if conn is None:
+        conn = get_connection(db_path)
+        should_close = True
+    try:
+        cur = conn.execute(
+            """
+            SELECT provider, business_type, org_id, api_domain, scopes, status, last_synced_at, metadata, created_at, updated_at
+            FROM autopilot_provider_connections
+            WHERE provider = ? AND business_type = ?
+            """,
+            (provider, business_type),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        res = dict(row)
+        if res.get("metadata"):
+            try:
+                res["metadata"] = json.loads(res["metadata"])
+            except Exception:
+                pass
+        return res
     finally:
         if should_close:
             conn.close()

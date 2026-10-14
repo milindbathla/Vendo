@@ -252,6 +252,78 @@ def compare_procurement_channels(
 
 
 # ---------------------------------------------------------------------------
+# Tool 6 -- search_nearby_competitors
+# Classification: read-only | source: Google Places API (New)
+# ---------------------------------------------------------------------------
+
+def search_nearby_competitors(
+    latitude: float = 26.4727,
+    longitude: float = 80.3015,
+    radius_meters: float = 1500.0,
+    place_types_json: str = '["restaurant", "meal_delivery"]',
+) -> Dict[str, Any]:
+    """Search for nearby businesses and competitor density via Google Places API (New).
+
+    Returns normalized place listings, ratings, distance in meters, and competitor metrics.
+    Data limitation: Represents public commercial listings, not customer demand proof.
+
+    Args:
+        latitude: Latitude coordinate (-90.0 to 90.0). Defaults to Kanpur anchor (26.4727).
+        longitude: Longitude coordinate (-180.0 to 180.0). Defaults to Kanpur anchor (80.3015).
+        radius_meters: Search radius in meters (max 50,000m). Defaults to 1500m.
+        place_types_json: JSON string list of place types to filter by.
+
+    Returns:
+        Dict with total_count, places list, and competitor analysis summary.
+    """
+    from src.integrations.google_places import GooglePlacesAdapter
+    types = None
+    if place_types_json:
+        try:
+            types = json.loads(place_types_json)
+        except Exception:
+            types = [t.strip() for t in place_types_json.split(",") if t.strip()]
+
+    adapter = GooglePlacesAdapter()
+    resp = adapter.search_nearby_places(
+        latitude=latitude,
+        longitude=longitude,
+        radius_meters=radius_meters,
+        place_types=types,
+    )
+    return resp.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Tool 7 -- get_zoho_accounting_summary
+# Classification: read-only | source: Zoho Books API
+# ---------------------------------------------------------------------------
+
+def get_zoho_accounting_summary(organization_id: Optional[str] = None) -> Dict[str, Any]:
+    """Retrieve verified accounting summary from Zoho Books API.
+
+    Returns invoiced revenue, cash collected, outstanding receivables,
+    overdue receivables, and vendor bills payable. Strictly distinguishes
+    billed revenue from collected cash.
+
+    Args:
+        organization_id: Optional Zoho Organization ID. If omitted, uses default.
+
+    Returns:
+        Dict with total_invoiced_revenue, cash_collected, outstanding_receivables,
+        and bills payable.
+    """
+    from src.integrations.zoho_books import ZohoBooksAdapter
+    adapter = ZohoBooksAdapter(org_id=organization_id)
+    summary = adapter.get_accounting_summary()
+    return {
+        "status": "SUCCESS",
+        "accounting_summary": summary.to_dict(),
+        "is_mock": adapter.is_mock,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Public registry -- maps stable names to callables
 # ---------------------------------------------------------------------------
 
@@ -261,6 +333,8 @@ TOOL_REGISTRY: Dict[str, Any] = {
     "evaluate_order_opportunity":   evaluate_order_opportunity,
     "get_supplier_quotes":          get_supplier_quotes,
     "compare_procurement_channels": compare_procurement_channels,
+    "search_nearby_competitors":    search_nearby_competitors,
+    "get_zoho_accounting_summary":  get_zoho_accounting_summary,
 }
 
 # Ordered list for Gemini SDK (Python functions passed as tools)

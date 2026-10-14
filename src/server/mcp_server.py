@@ -32,11 +32,15 @@ from src.services.supplier_simulator import (
     SupplierCatalogueSimulator,
     SIMULATION_NOTICE,
 )
+from src.integrations.google_places import GooglePlacesAdapter
+from src.integrations.zoho_books import ZohoBooksAdapter
 
 
 def create_mcp_server(
     approval_service: Optional[PurchaseApprovalService] = None,
     profiles: Optional[Dict[str, BusinessProfile]] = None,
+    places_adapter: Optional[GooglePlacesAdapter] = None,
+    zoho_adapter: Optional[ZohoBooksAdapter] = None,
 ) -> FastMCP:
     """Factory to create and configure the Alexa Business Autopilot MCP Server."""
 
@@ -52,6 +56,8 @@ def create_mcp_server(
     approvals = approval_service or PurchaseApprovalService()
     recipe_manager = TiffinRecipeManager()
     supplier_simulator = SupplierCatalogueSimulator()
+    places = places_adapter or GooglePlacesAdapter()
+    zoho = zoho_adapter or ZohoBooksAdapter()
 
     # -------------------------------------------------------------------------
     # Tool 1: get_business_state
@@ -300,5 +306,115 @@ def create_mcp_server(
                 "plan_id": plan_id,
                 "simulation_notice": SIMULATION_NOTICE,
             }
+
+    # -------------------------------------------------------------------------
+    # Tool 11: search_nearby_competitors (Google Places API New)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def search_nearby_competitors(
+        latitude: float = 26.4727,
+        longitude: float = 80.3015,
+        radius_meters: float = 1500.0,
+        place_types_json: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Discovers nearby commercial businesses and potential competitors using Google Places API (New).
+        Returns normalized listings, distance in meters, user ratings, and competitor summary.
+        Data limitation: Represents public commercial listings, not proof of customer demand.
+        """
+        types = None
+        if place_types_json:
+            try:
+                types = json.loads(place_types_json)
+            except Exception:
+                types = [t.strip() for t in place_types_json.split(",") if t.strip()]
+        resp = places.search_nearby_places(
+            latitude=latitude,
+            longitude=longitude,
+            radius_meters=radius_meters,
+            place_types=types,
+        )
+        return resp.to_dict()
+
+    # -------------------------------------------------------------------------
+    # Tool 12: get_zoho_organization (Zoho Books API)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def get_zoho_organization(organization_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Retrieves company details, currency settings, and tax status from Zoho Books.
+        """
+        org = zoho.get_organization(organization_id=organization_id)
+        return {
+            "status": "SUCCESS",
+            "organization": org.to_dict(),
+            "is_mock": zoho.is_mock,
+        }
+
+    # -------------------------------------------------------------------------
+    # Tool 13: get_zoho_invoices (Zoho Books API)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def get_zoho_invoices(
+        status: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> Dict[str, Any]:
+        """
+        Retrieves paginated sales invoices and accounts receivable balances from Zoho Books.
+        Preserves distinction between invoiced revenue and collected cash.
+        """
+        resp = zoho.get_invoices(status=status, page=page, per_page=per_page)
+        return resp.to_dict()
+
+    # -------------------------------------------------------------------------
+    # Tool 14: get_zoho_expenses_and_bills (Zoho Books API)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def get_zoho_expenses_and_bills(
+        page: int = 1,
+        per_page: int = 20,
+    ) -> Dict[str, Any]:
+        """
+        Retrieves operating expenses and accounts payable vendor bills from Zoho Books.
+        """
+        bills_resp = zoho.get_bills(page=page, per_page=per_page)
+        expenses_resp = zoho.get_expenses(page=page, per_page=per_page)
+        summary = zoho.get_accounting_summary()
+        return {
+            "status": "SUCCESS",
+            "accounting_summary": summary.to_dict(),
+            "bills": bills_resp.to_dict(),
+            "expenses": expenses_resp.to_dict(),
+            "is_mock": zoho.is_mock,
+        }
+
+    # -------------------------------------------------------------------------
+    # Tool 15: get_external_integrations_status
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def get_external_integrations_status() -> Dict[str, Any]:
+        """
+        Reports operational and connectivity status of external API providers (Google Places & Zoho Books).
+        """
+        return {
+            "google_places": {
+                "provider": "google_places",
+                "mode": "mock" if places.is_mock else "live",
+                "api_endpoint": "https://places.googleapis.com/v1/places:searchNearby",
+            },
+            "zoho_books": {
+                "provider": "zoho_books",
+                "mode": "mock" if zoho.is_mock else "live",
+                "api_domain": zoho.oauth_manager.api_domain,
+                "accounts_url": zoho.oauth_manager.accounts_url,
+                "org_id": zoho.org_id,
+                "is_configured": zoho.oauth_manager.is_configured,
+            },
+            "amazon_pay": {
+                "provider": "amazon_pay",
+                "status": "EXPLICITLY_OUT_OF_SCOPE",
+            },
+        }
 
     return server

@@ -42,6 +42,9 @@ from src.decision.business_autopilot import BusinessAutopilotV2, OpportunityDeci
 from src.models.recipe import TiffinRecipeManager
 from src.services.supplier_simulator import SupplierCatalogueSimulator, SIMULATION_NOTICE
 from src.simulator import load_business_profiles
+from src.integrations.google_places import GooglePlacesAdapter
+from src.integrations.zoho_books import ZohoBooksAdapter
+from src.integrations.base import IntegrationError, ValidationError
 
 
 # ── Database initialisation ────────────────────────────────────────────────────
@@ -55,11 +58,15 @@ business_profiles   = load_business_profiles()
 recipe_manager      = TiffinRecipeManager()
 supplier_simulator  = SupplierCatalogueSimulator()
 state_repo          = BusinessStateRepository(_DB_PATH)
+places_adapter      = GooglePlacesAdapter()
+zoho_adapter        = ZohoBooksAdapter()
 
 # Create official MCP server instance (shares the same approval service instance)
 mcp_server = create_mcp_server(
     approval_service=approvals_service,
     profiles=business_profiles,
+    places_adapter=places_adapter,
+    zoho_adapter=zoho_adapter,
 )
 
 # Initialize FastAPI application
@@ -238,6 +245,96 @@ def execute_plan(req: ExecutePlanRequest):
             "simulation_notice": SIMULATION_NOTICE,
         }
     except (PlanNotFoundError, InvalidPlanStateError, InsufficientFundsError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class PlacesNearbyRequest(BaseModel):
+    latitude: float = Field(default=26.4727, description="Search latitude")
+    longitude: float = Field(default=80.3015, description="Search longitude")
+    radius_meters: float = Field(default=1500.0, description="Radius in meters (max 50,000m)")
+    place_types: Optional[List[str]] = Field(default=None, description="Optional list of place types")
+
+
+# ── Integration Endpoints ──────────────────────────────────────────────────────
+
+@app.get("/api/integrations/status")
+def get_integrations_status():
+    """Returns connectivity and operational mode of external provider integrations."""
+    return {
+        "status": "SUCCESS",
+        "google_places": {
+            "provider": "google_places",
+            "mode": "mock" if places_adapter.is_mock else "live",
+            "api_endpoint": "https://places.googleapis.com/v1/places:searchNearby",
+        },
+        "zoho_books": {
+            "provider": "zoho_books",
+            "mode": "mock" if zoho_adapter.is_mock else "live",
+            "org_id": zoho_adapter.org_id,
+            "api_domain": zoho_adapter.oauth_manager.api_domain,
+            "is_configured": zoho_adapter.oauth_manager.is_configured,
+        },
+        "amazon_pay": {
+            "provider": "amazon_pay",
+            "status": "EXPLICITLY_OUT_OF_SCOPE",
+        },
+    }
+
+
+@app.post("/api/integrations/places/nearby")
+def search_places_nearby(req: PlacesNearbyRequest):
+    """Searches nearby commercial listings via Google Places API (New)."""
+    try:
+        resp = places_adapter.search_nearby_places(
+            latitude=req.latitude,
+            longitude=req.longitude,
+            radius_meters=req.radius_meters,
+            place_types=req.place_types,
+        )
+        return resp.to_dict()
+    except (ValidationError, IntegrationError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/integrations/zoho/organization")
+def get_zoho_org(organization_id: Optional[str] = None):
+    """Retrieves organization metadata from Zoho Books."""
+    try:
+        org = zoho_adapter.get_organization(organization_id=organization_id)
+        return {
+            "status": "SUCCESS",
+            "organization": org.to_dict(),
+            "is_mock": zoho_adapter.is_mock,
+        }
+    except (ValidationError, IntegrationError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/integrations/zoho/invoices")
+def get_zoho_invoices_endpoint(status: Optional[str] = None, page: int = 1, per_page: int = 20):
+    """Retrieves paginated invoices from Zoho Books."""
+    try:
+        resp = zoho_adapter.get_invoices(status=status, page=page, per_page=per_page)
+        return resp.to_dict()
+    except (ValidationError, IntegrationError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/integrations/zoho/expenses")
+def get_zoho_expenses_endpoint(page: int = 1, per_page: int = 20):
+    """Retrieves bills, expenses, and accounting summary from Zoho Books."""
+    try:
+        bills_resp = zoho_adapter.get_bills(page=page, per_page=per_page)
+        expenses_resp = zoho_adapter.get_expenses(page=page, per_page=per_page)
+        summary = zoho_adapter.get_accounting_summary()
+        return {
+            "status": "SUCCESS",
+            "accounting_summary": summary.to_dict(),
+            "bills": bills_resp.to_dict(),
+            "expenses": expenses_resp.to_dict(),
+            "is_mock": zoho_adapter.is_mock,
+        }
+    except (ValidationError, IntegrationError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
