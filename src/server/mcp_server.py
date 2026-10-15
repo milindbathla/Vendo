@@ -32,6 +32,8 @@ from src.services.supplier_simulator import (
     SupplierCatalogueSimulator,
     SIMULATION_NOTICE,
 )
+from Agents.finance_agent import FinanceAgent
+from Agents.supplier_intelligence import SupplierIntelligenceAgent
 
 
 def create_mcp_server(
@@ -299,6 +301,77 @@ def create_mcp_server(
                 "error": str(e),
                 "plan_id": plan_id,
                 "simulation_notice": SIMULATION_NOTICE,
+            }
+
+    # -------------------------------------------------------------------------
+    # Tool 11: get_profitability_analysis (Finance Specialist Agent)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def get_profitability_analysis(business_type: str = "home_tiffin") -> Dict[str, Any]:
+        """
+        Computes contribution margin, break-even volume, and profit at
+        current demand vs full capacity using the Finance Specialist Agent.
+        """
+        agent = FinanceAgent(business_type=business_type)
+        return agent.analyze_profitability()
+
+    # -------------------------------------------------------------------------
+    # Tool 12: forecast_cash_flow (Finance Specialist Agent)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def forecast_cash_flow(
+        days: int = 7,
+        business_type: str = "home_tiffin",
+        planned_procurement_cost: float = 0.0,
+        planned_procurement_day: int = 1,
+    ) -> Dict[str, Any]:
+        """
+        Projects rolling cash flow over N days based on current demand
+        and cost structure using the Finance Specialist Agent.
+        """
+        agent = FinanceAgent(business_type=business_type)
+        return agent.forecast_cash_flow(
+            days=days,
+            planned_procurement_cost=planned_procurement_cost,
+            planned_procurement_day=planned_procurement_day,
+        )
+
+    # -------------------------------------------------------------------------
+    # Tool 13: get_supplier_profile (Supplier Intelligence Specialist Agent)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def get_supplier_profile(supplier_id: str) -> Dict[str, Any]:
+        """
+        Retrieves full supplier profile, contact details, lead times,
+        and rating using the Supplier Intelligence Specialist Agent.
+        """
+        supplier_intel_agent = SupplierIntelligenceAgent()
+        try:
+            return supplier_intel_agent.get_supplier_profile(supplier_id=supplier_id)
+        except Exception as e:
+            return {
+                "status": "ERROR",
+                "error": str(e),
+                "supplier_id": supplier_id,
+            }
+
+    # -------------------------------------------------------------------------
+    # Tool 14: evaluate_supplier (Supplier Intelligence Specialist Agent)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def evaluate_supplier(supplier_id: str) -> Dict[str, Any]:
+        """
+        Scores a supplier across quality, cost, speed, reliability, and relationship
+        dimensions using the Supplier Intelligence Specialist Agent.
+        """
+        supplier_intel_agent = SupplierIntelligenceAgent()
+        try:
+            return supplier_intel_agent.evaluate_supplier(supplier_id=supplier_id)
+        except Exception as e:
+            return {
+                "status": "ERROR",
+                "error": str(e),
+                "supplier_id": supplier_id,
             }
 
     return server

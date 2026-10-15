@@ -1,12 +1,11 @@
-# Core Gemini Agent & Vector Storage
+# Core Gemini Agent
 google-genai>=2.0.0
-chromadb>=1.5.0
 
 # Backend Web API & MCP Protocols
 fastapi>=0.115.0
 uvicorn>=0.30.0
 pydantic>=2.0.0
-mcp>=1.0.0
+mcp>=1.0.0,<2.0.0
 anyio>=4.0.0
 
 # CLI, Analytics & Testing

@@ -5,7 +5,7 @@ Evaluates suppliers, maintains supplier relationships, and provides
 intelligent supplier analysis for Indian micro-enterprises.
 """
 
-from src.supplier_intelligence.agent import (
+from .agent import (
     SupplierIntelligenceAgent,
     SupplierProfile,
     SupplierEvaluation,

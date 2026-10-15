@@ -1,8 +1,41 @@
 """Test memory authorizer and write permissions."""
+import os
+import shutil
 import sqlite3
+from pathlib import Path
 import pytest
+
+import business_intel.config as bi_config
+import business_intel.db as bi_db
 from business_intel.db import get_authorizer_rw_connection
 from business_intel.tools.context_tools import write_business_memory, get_business_memory
+
+
+@pytest.fixture(autouse=True)
+def isolate_memory_authorizer_db(tmp_path, monkeypatch):
+    """
+    Isolate test database writes so tests never modify the canonical demo.db.
+    Copies canonical demo.db to a temporary directory and rebinds DEMO_DB_PATH.
+    """
+    source_db = None
+    for cand in [
+        Path(__file__).resolve().parents[3] / "data" / "demo.db",
+        Path(__file__).resolve().parents[1] / "demo_data" / "demo.db",
+    ]:
+        if cand.exists():
+            source_db = cand
+            break
+
+    assert source_db is not None, "Canonical demo.db not found for test isolation."
+    test_db = tmp_path / "test_memory_demo.db"
+    shutil.copy2(source_db, test_db)
+
+    test_db_str = str(test_db)
+    monkeypatch.setattr(bi_config, "DEMO_DB_PATH", test_db_str)
+    monkeypatch.setattr(bi_db, "DEMO_DB_PATH", test_db_str)
+    monkeypatch.setenv("DEMO_DB_PATH", test_db_str)
+    yield test_db_str
+
 
 
 def test_authorizer_blocks_unauthorized_tables():

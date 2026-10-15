@@ -8,15 +8,42 @@ Validates:
 - Two-phase approval and execution workflow via API
 - Static web interface rendering (/)
 """
+import os
+import tempfile
 import pytest
 from starlette.testclient import TestClient
 
+# Ensure DATABASE_PATH is isolated before importing web_app
+if "DATABASE_PATH" not in os.environ:
+    _temp_dir = tempfile.mkdtemp(prefix="web_api_test_")
+    os.environ["DATABASE_PATH"] = os.path.join(_temp_dir, "test_isolated.sqlite3")
+
+from src.db.connection import initialize_database, seed_business_state
+from src.decision.approval_service import PurchaseApprovalService
+from src.db.state_repository import BusinessStateRepository
+import src.server.web_app as web_app
 from src.server.web_app import app
 
 
 @pytest.fixture
-def client():
+def isolated_web_db(tmp_path, monkeypatch):
+    """Provides a fresh isolated database for each web API test."""
+    temp_db = str(tmp_path / "test_web_api.sqlite3")
+    initialize_database(temp_db)
+    seed_business_state(temp_db)
+    svc = PurchaseApprovalService(db_path=temp_db)
+    repo = BusinessStateRepository(temp_db)
+    monkeypatch.setattr(web_app, "_DB_PATH", temp_db)
+    monkeypatch.setattr(web_app, "approvals_service", svc)
+    monkeypatch.setattr(web_app, "state_repo", repo)
+    monkeypatch.setenv("DATABASE_PATH", temp_db)
+    return temp_db
+
+
+@pytest.fixture
+def client(isolated_web_db):
     return TestClient(app)
+
 
 
 def test_1_health_endpoint(client):

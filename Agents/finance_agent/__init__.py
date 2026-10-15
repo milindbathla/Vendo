@@ -5,7 +5,7 @@ Analyzes cash, profitability, and financial feasibility for Indian
 micro-enterprises connected to the Alexa Business Autopilot system.
 """
 
-from src.finance_agent.agent import (
+from .agent import (
     FinanceAgent,
     FinancialPosition,
     CashFlowForecast,
