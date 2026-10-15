@@ -572,16 +572,17 @@ class TestTC12_ExistingTestsCompatible:
         assert hasattr(autopilot_agent, "run_autopilot_agent")
         assert hasattr(autopilot_agent, "AgentResult")
 
-    def test_tool_registry_has_five_tools(self):
-        """Exactly 5 tools are registered in the initial milestone."""
+    def test_tool_registry_has_expected_tools(self):
+        """All expected tools are registered (5 original + 2 integration tools from remote)."""
         from src.agent.tools import TOOL_REGISTRY
-        assert len(TOOL_REGISTRY) == 5
         expected = {
             "get_business_overview",
             "get_financial_position",
             "evaluate_order_opportunity",
             "get_supplier_quotes",
             "compare_procurement_channels",
+            "search_nearby_competitors",
+            "get_zoho_accounting_summary",
         }
         assert set(TOOL_REGISTRY.keys()) == expected
 
