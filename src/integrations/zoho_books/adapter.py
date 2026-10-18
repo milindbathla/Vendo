@@ -119,16 +119,42 @@ class ZohoBooksAdapter:
         return self._normalize_organization(org_data)
 
     def _normalize_organization(self, data: Dict[str, Any]) -> ZohoOrganization:
+        raw_month = data.get("fiscal_year_start_month", 4)
+        month_int = 4
+        if isinstance(raw_month, int):
+            month_int = raw_month
+        elif isinstance(raw_month, str):
+            month_map = {
+                "january": 1, "february": 2, "march": 3, "april": 4,
+                "may": 5, "june": 6, "july": 7, "august": 8,
+                "september": 9, "october": 10, "november": 11, "december": 12,
+            }
+            clean_str = raw_month.strip().lower()
+            if clean_str.isdigit():
+                month_int = int(clean_str)
+            else:
+                month_int = month_map.get(clean_str, 4)
+
+        country_val = data.get("country")
+        if not country_val and isinstance(data.get("address"), dict):
+            country_val = data.get("address", {}).get("country")
+        if not country_val:
+            country_val = "India"
+
+        tax_id_val = data.get("tax_id") or data.get("gstin")
+        if not tax_id_val and isinstance(data.get("tax_settings"), dict):
+            tax_id_val = data.get("tax_settings", {}).get("tax_reg_no")
+
         return ZohoOrganization(
-            organization_id=data.get("organization_id", "unknown"),
+            organization_id=str(data.get("organization_id", "unknown")),
             name=data.get("name") or data.get("organization_name", "Unnamed Organization"),
             currency_code=data.get("currency_code", "INR"),
             currency_symbol=data.get("currency_symbol", "₹"),
-            country=data.get("country", "India"),
-            fiscal_year_start_month=int(data.get("fiscal_year_start_month", 4)),
-            is_active=bool(data.get("is_active", True)),
-            tax_registered=bool(data.get("tax_registered", True)),
-            tax_id=data.get("tax_id") or data.get("gstin"),
+            country=country_val,
+            fiscal_year_start_month=month_int,
+            is_active=bool(data.get("is_active", data.get("is_org_active", True))),
+            tax_registered=bool(data.get("tax_registered", data.get("is_registered_for_gst", False))),
+            tax_id=tax_id_val,
         )
 
     # -------------------------------------------------------------------------
@@ -317,10 +343,14 @@ class ZohoBooksAdapter:
         * Outstanding receivables are separated into active vs overdue.
         """
         invoices_resp = self.get_invoices(page=1, per_page=100)
-        bills_resp = self.get_bills(page=1, per_page=100)
+        bills: List[ZohoBill] = []
+        try:
+            bills_resp = self.get_bills(page=1, per_page=100)
+            bills = bills_resp.data
+        except AuthenticationError as e:
+            logger.warning("Zoho Books bills read scope not authorized (HTTP 401/code 57): %s. Proceeding with 0 payables.", e)
 
         invoices: List[ZohoInvoice] = invoices_resp.data
-        bills: List[ZohoBill] = bills_resp.data
 
         total_invoiced = sum(inv.total_amount for inv in invoices)
         unpaid_receivables = sum(inv.balance for inv in invoices)

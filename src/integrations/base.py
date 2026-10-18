@@ -68,6 +68,31 @@ def sanitize_credentials(text: str) -> str:
     return sanitized
 
 
+def load_dotenv_safe(env_path: Optional[str] = None) -> None:
+    """Safely loads key-value pairs from .env into os.environ if not already present."""
+    from pathlib import Path
+    path = Path(env_path) if env_path else Path(__file__).resolve().parents[2] / ".env"
+    if not path.is_file():
+        return
+    try:
+        content = path.read_text(encoding="utf-8")
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k = k.strip()
+            v = v.strip().strip("'\"")
+            if k and k not in os.environ:
+                os.environ[k] = v
+    except Exception as e:
+        logger.debug("Could not read .env: %s", e)
+
+
+# Automatically load .env on module import
+load_dotenv_safe()
+
+
 # ---------------------------------------------------------------------------
 # Base Configuration
 # ---------------------------------------------------------------------------
@@ -78,6 +103,7 @@ class IntegrationConfig:
     @staticmethod
     def is_mock_enabled(explicit_mock: Optional[bool] = None) -> bool:
         """Determines if mock mode is forced via argument or environment."""
+        load_dotenv_safe()
         if explicit_mock is not None:
             return explicit_mock
         env_val = os.environ.get("MOCK_INTEGRATIONS", "").strip().lower()
@@ -85,9 +111,11 @@ class IntegrationConfig:
 
     @staticmethod
     def get_google_maps_api_key() -> Optional[str]:
-        """Returns the configured Google Maps API key, if present."""
+        """Returns the configured Google Maps API key, if present and not a placeholder."""
         key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
-        return key if key else None
+        if not key or "your_" in key.lower() or "placeholder" in key.lower():
+            return None
+        return key
 
     @staticmethod
     def get_zoho_config() -> Dict[str, str]:

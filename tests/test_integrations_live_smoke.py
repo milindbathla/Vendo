@@ -21,9 +21,9 @@ class TestGooglePlacesLiveSmoke(unittest.TestCase):
 
     def setUp(self):
         self.api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
-        if not self.api_key:
+        if not self.api_key or "your_" in self.api_key.lower() or "placeholder" in self.api_key.lower():
             raise unittest.SkipTest(
-                "GOOGLE_MAPS_API_KEY not set in environment. Skipping live Google Places smoke test."
+                "GOOGLE_MAPS_API_KEY not configured with a real key. Skipping live Google Places smoke test."
             )
 
     def test_live_nearby_search_kanpur(self):
