@@ -47,7 +47,9 @@ from src.services.supplier_simulator import SupplierCatalogueSimulator, SIMULATI
 from src.simulator import load_business_profiles
 from src.integrations.google_places import GooglePlacesAdapter
 from src.integrations.zoho_books import ZohoBooksAdapter
+from src.integrations.amazon_pay import AmazonPayAdapter
 from src.integrations.base import IntegrationError, ValidationError
+from src.integrations.meta import MetaAdapter
 
 # Phase 4 persistence, decision, and agent imports
 from src.db.task_repository import (
@@ -96,6 +98,9 @@ orchestrator        = AdaptiveBusinessOrchestrator(
     places_adapter=places_adapter,
     zoho_adapter=zoho_adapter,
 )
+amazon_pay_adapter = AmazonPayAdapter()
+meta_adapter       = MetaAdapter()
+
 
 # Phase 4 services
 task_repo           = TaskRepository(_DB_PATH)
@@ -366,10 +371,8 @@ def get_integrations_status():
             "api_domain": zoho_adapter.oauth_manager.api_domain,
             "is_configured": zoho_adapter.oauth_manager.is_configured,
         },
-        "amazon_pay": {
-            "provider": "amazon_pay",
-            "status": "EXPLICITLY_OUT_OF_SCOPE",
-        },
+        "amazon_pay": amazon_pay_adapter.get_status(),
+        "meta": meta_adapter.get_status(),
     }
 
 
