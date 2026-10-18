@@ -573,7 +573,7 @@ class TestTC12_ExistingTestsCompatible:
         assert hasattr(autopilot_agent, "AgentResult")
 
     def test_tool_registry_has_expected_tools(self):
-        """All expected tools are registered (5 original + 2 integration tools from remote)."""
+        """All expected tools are registered (7 original + 3 adaptive profile tools)."""
         from src.agent.tools import TOOL_REGISTRY
         expected = {
             "get_business_overview",
@@ -583,6 +583,10 @@ class TestTC12_ExistingTestsCompatible:
             "compare_procurement_channels",
             "search_nearby_competitors",
             "get_zoho_accounting_summary",
+            # Adaptive multi-business tools added in current milestone
+            "get_adaptive_profile",
+            "onboard_or_update_business",
+            "list_registered_businesses",
         }
         assert set(TOOL_REGISTRY.keys()) == expected
 

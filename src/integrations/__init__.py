@@ -61,5 +61,14 @@ __all__ = [
     "ZohoPaginatedResponse",
     "BusinessDataNormalizer",
     "to_currency_decimal",
+    "BaseEmailProvider",
+    "MockEmailProvider",
+    "EmailIngestionService",
 ]
+
+from src.integrations.email_provider import (
+    BaseEmailProvider,
+    MockEmailProvider,
+    EmailIngestionService,
+)
 

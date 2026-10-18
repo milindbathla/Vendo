@@ -24,4 +24,25 @@ __all__ = [
     "seed_business_state",
     "PlanRepository",
     "BusinessStateRepository",
+    "AdaptiveProfileRepository",
+    "EmailRepository",
+    "TaskRepository",
+    "TaskNotFoundError",
+    "ActionNotFoundError",
+    "InvalidStateTransitionError",
+    "PayloadTamperedError",
+    "UnauthorizedError",
+    "ConcurrentUpdateError",
 ]
+
+from src.db.profile_repository import AdaptiveProfileRepository
+from src.db.email_repository import EmailRepository
+from src.db.task_repository import (
+    TaskRepository,
+    TaskNotFoundError,
+    ActionNotFoundError,
+    InvalidStateTransitionError,
+    PayloadTamperedError,
+    UnauthorizedError,
+    ConcurrentUpdateError,
+)

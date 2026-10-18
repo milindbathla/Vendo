@@ -87,8 +87,13 @@ class PurchasePlanItem:
     unit_price: float
     total_price: float
 
+    @property
+    def item_name(self) -> str:
+        return self.ingredient_name
+
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "item_name":       self.ingredient_name,
             "ingredient_name": self.ingredient_name,
             "display_name":    self.display_name,
             "quantity":        round(self.quantity, 2),
@@ -180,13 +185,18 @@ class PurchaseApprovalService:
         unchanged without touching the filesystem.
     """
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        db_path: Optional[str] = None,
+        shared_conn: Optional[sqlite3.Connection] = None,
+    ) -> None:
         self._db_path: str = db_path or ":memory:"
-        self._shared_conn: Optional[sqlite3.Connection] = None
+        self._shared_conn: Optional[sqlite3.Connection] = shared_conn
         self._plans: Dict[str, PurchasePlan] = {}
         if self._db_path == ":memory:":
-            self._shared_conn = get_connection(":memory:")
-            initialize_database(conn=self._shared_conn)
+            if self._shared_conn is None:
+                self._shared_conn = get_connection(":memory:")
+                initialize_database(conn=self._shared_conn)
             self._repo = PlanRepository(":memory:", shared_conn=self._shared_conn)
         else:
             initialize_database(self._db_path)
@@ -269,6 +279,14 @@ class PurchaseApprovalService:
             raise PlanNotFoundError(f"Purchase plan '{plan_id}' does not exist.")
         except RuntimeError as exc:
             raise InvalidPlanStateError(str(exc)) from exc
+
+    def approve_plan(self, plan_id: str) -> "PurchasePlan":
+        """Convenience shortcut: confirms plan with decision='APPROVED'."""
+        return self.confirm_plan(plan_id, "APPROVED")
+
+    def reject_plan(self, plan_id: str) -> "PurchasePlan":
+        """Convenience shortcut: confirms plan with decision='REJECTED'."""
+        return self.confirm_plan(plan_id, "REJECTED")
 
     def execute_plan(
         self,

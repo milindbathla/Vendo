@@ -30,11 +30,13 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # Canonical database: the seeded demo.db shared with the specialist agents.
 # The autopilot's own runtime tables (autopilot_*) are created additively here
 # and never collide with the teammate-owned domain tables.
-DEFAULT_DB_PATH: str = str(_PROJECT_ROOT / "data" / "demo.db")
+DEFAULT_DB_PATH: str = os.environ.get(
+    "DATABASE_PATH", str(_PROJECT_ROOT / "data" / "demo.db")
+)
 _PROFILES_JSON: Path = _PROJECT_ROOT / "data" / "business_profiles.json"
 
 # Current schema version – bump this integer when DDL changes.
-_CURRENT_SCHEMA_VERSION = 2
+_CURRENT_SCHEMA_VERSION = 3
 
 # ── DDL ────────────────────────────────────────────────────────────────────────
 _DDL_V1 = """
@@ -130,6 +132,38 @@ CREATE TABLE IF NOT EXISTS autopilot_provider_connections (
 CREATE INDEX IF NOT EXISTS idx_provider_connections ON autopilot_provider_connections(provider, business_type);
 """
 
+_DDL_V3 = """
+-- Adaptive business profiles: multiple independent business profiles
+CREATE TABLE IF NOT EXISTS autopilot_business_profiles (
+    business_id          TEXT    PRIMARY KEY,
+    display_name         TEXT    NOT NULL,
+    category             TEXT    NOT NULL,
+    description          TEXT    NOT NULL DEFAULT '',
+    city                 TEXT    NOT NULL DEFAULT 'Kanpur',
+    state                TEXT    NOT NULL DEFAULT 'Uttar Pradesh',
+    currency             TEXT    NOT NULL DEFAULT 'INR',
+    onboarding_completed INTEGER NOT NULL DEFAULT 0,
+    created_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- Adaptive business facts with provenance & confidence tracking
+CREATE TABLE IF NOT EXISTS autopilot_business_facts (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id          TEXT    NOT NULL REFERENCES autopilot_business_profiles(business_id) ON DELETE CASCADE,
+    fact_key             TEXT    NOT NULL,
+    fact_value_json      TEXT    NOT NULL,
+    value_type           TEXT    NOT NULL DEFAULT 'str',
+    status               TEXT    NOT NULL DEFAULT 'unknown', -- 'confirmed', 'assumed', 'unknown', 'outdated'
+    source               TEXT    NOT NULL DEFAULT 'user_stated', -- 'user_stated', 'inferred', 'external_api', 'system_default'
+    confidence           REAL    NOT NULL DEFAULT 1.0,
+    notes                TEXT    NOT NULL DEFAULT '',
+    updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE(business_id, fact_key)
+);
+CREATE INDEX IF NOT EXISTS idx_business_facts_biz ON autopilot_business_facts(business_id);
+"""
+
 
 # ── Connection factory ─────────────────────────────────────────────────────────
 
@@ -185,6 +219,11 @@ def initialize_database(
         conn.execute(
             "INSERT OR IGNORE INTO autopilot_schema_migrations (version) VALUES (?)",
             (2,),
+        )
+        conn.executescript(_DDL_V3)
+        conn.execute(
+            "INSERT OR IGNORE INTO autopilot_schema_migrations (version) VALUES (?)",
+            (3,),
         )
         conn.commit()
         logger.info("Database schema initialised at %s (version %d)", db_path, _CURRENT_SCHEMA_VERSION)

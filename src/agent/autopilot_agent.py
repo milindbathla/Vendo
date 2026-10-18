@@ -253,6 +253,9 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Any:
 def run_autopilot_agent(
     user_goal: str,
     *,
+    business_id: Optional[str] = None,
+    profile_repo: Optional[Any] = None,
+    allow_offline: bool = False,
     model: Optional[str] = None,
     max_iterations: Optional[int] = None,
     api_key: Optional[str] = None,
@@ -266,6 +269,10 @@ def run_autopilot_agent(
     Args:
         user_goal: Natural-language description of what the business owner
             wants to evaluate or accomplish.
+        business_id: Optional business ID to anchor context to an adaptive profile.
+        profile_repo: Optional AdaptiveProfileRepository instance for isolation.
+        allow_offline: When True, if GEMINI_API_KEY is absent and no _client is provided,
+            runs deterministically via AdaptiveBusinessOrchestrator without crashing.
         model: Gemini model name override (default: GEMINI_MODEL env var or
             "gemini-2.0-flash-001").
         max_iterations: Maximum number of tool-call rounds (default: 10).
@@ -278,20 +285,91 @@ def run_autopilot_agent(
         AgentResult with the final recommendation and tool evidence.
 
     Raises:
-        EnvironmentError: If GEMINI_API_KEY is absent and no _client is injected.
+        EnvironmentError: If GEMINI_API_KEY is absent, no _client is injected, and allow_offline is False.
         RuntimeError: For unrecoverable SDK errors after all retries.
     """
     from google import genai
     from google.genai import types
-    from src.agent.tools import TOOL_LIST
+    from src.agent.tools import (
+        TOOL_LIST,
+        set_active_profile_repo,
+        set_active_business_id,
+        _active_adaptive_repo,
+    )
+
+    if profile_repo is not None:
+        set_active_profile_repo(profile_repo)
+    if business_id is not None:
+        set_active_business_id(business_id)
 
     chosen_model = model or _MODEL
     chosen_max = max_iterations if max_iterations is not None else _MAX_ITER
+
+    # -- Resolve active business context for instructions -------------------
+    active_profile_context = ""
+    if business_id:
+        repo = profile_repo or _active_adaptive_repo
+        if repo:
+            prof = repo.get_profile(business_id)
+            if prof:
+                _confirmed = {
+                    k: f.value for k, f in prof.facts.items()
+                    if f.status.value == "confirmed"
+                }
+                _assumed = {
+                    k: f.value for k, f in prof.facts.items()
+                    if f.status.value == "assumed"
+                }
+                _missing = [
+                    k for k, f in prof.facts.items()
+                    if f.status.value == "unknown"
+                ]
+                active_profile_context = (
+                    f"\n\nActive Business Context:\n"
+                    f"- Business ID: {prof.business_id}\n"
+                    f"- Name: {prof.display_name}\n"
+                    f"- Category: {prof.category}\n"
+                    f"- Onboarding Completed: {prof.onboarding_completed}\n"
+                    f"- Confirmed Facts: {json.dumps(_confirmed)}\n"
+                    f"- Missing Critical Fields: {', '.join(_missing)}\n"
+                    f"- Assumptions: {json.dumps(_assumed)}\n"
+                )
+            else:
+                active_profile_context = (
+                    f"\n\nActive Business Context:\n"
+                    f"- Business ID: '{business_id}' (Profile not yet registered. Ask the owner about their business or prompt onboarding.)\n"
+                )
 
     # -- Build client --------------------------------------------------------
     if _client is None:
         key = api_key or os.environ.get("GEMINI_API_KEY", "")
         if not key:
+            if allow_offline:
+                from src.agent.orchestrator import AdaptiveBusinessOrchestrator
+                repo = profile_repo or _active_adaptive_repo
+                orchestrator = AdaptiveBusinessOrchestrator(repo=repo)
+                offline_resp = orchestrator.handle_user_message(
+                    business_id=business_id or "default",
+                    message=user_goal,
+                )
+                return AgentResult(
+                    recommendation=offline_resp.get("reply", ""),
+                    rationale="Deterministic execution via AdaptiveBusinessOrchestrator (offline mode without Gemini API key).",
+                    trade_offs="No generative LLM reasoning applied; structured rule-based responses only.",
+                    next_steps=offline_resp.get("suggested_actions", []),
+                    approvals_required=[],
+                    assumptions=["Executed in offline mode without Gemini LLM."],
+                    unknowns=[],
+                    tools_invoked=[{
+                        "tool": "offline_orchestrator",
+                        "args": {"business_id": business_id, "user_goal": user_goal},
+                        "summary": f"intent={offline_resp.get('intent', 'unknown')}",
+                        "error": None,
+                    }],
+                    raw_response=offline_resp.get("reply", ""),
+                    iterations=1,
+                    error=None,
+                )
             raise EnvironmentError(
                 "GEMINI_API_KEY environment variable is not set. "
                 "Set it before running the agent. Never pass the key in source code."
@@ -323,7 +401,7 @@ def run_autopilot_agent(
                 model=chosen_model,
                 contents=contents,
                 config=types.GenerateContentConfig(
-                    system_instruction=_SYSTEM_INSTRUCTIONS,
+                    system_instruction=_SYSTEM_INSTRUCTIONS + active_profile_context,
                     tools=TOOL_LIST,
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(
                         disable=True  # Manual loop so we control dispatch & logging

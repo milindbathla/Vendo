@@ -36,6 +36,15 @@ from Agents.finance_agent import FinanceAgent
 from Agents.supplier_intelligence import SupplierIntelligenceAgent
 from src.integrations.google_places import GooglePlacesAdapter
 from src.integrations.zoho_books import ZohoBooksAdapter
+from src.db.connection import DEFAULT_DB_PATH
+from src.db.profile_repository import AdaptiveProfileRepository
+from src.agent.orchestrator import AdaptiveBusinessOrchestrator
+from src.db.task_repository import TaskRepository, ActionProposal, OperationalTask, TaskState
+from src.db.email_repository import EmailRepository
+from src.decision.policy_engine import PermissionEngine
+from src.decision.action_dispatcher import ActionDispatcher, ExecutionReceipt
+from src.agent.supervisor import EmailOperationalSupervisor
+from src.models.email import InboundEmail, EmailAddress
 
 
 def create_mcp_server(
@@ -43,6 +52,12 @@ def create_mcp_server(
     profiles: Optional[Dict[str, BusinessProfile]] = None,
     places_adapter: Optional[GooglePlacesAdapter] = None,
     zoho_adapter: Optional[ZohoBooksAdapter] = None,
+    profile_repo: Optional[AdaptiveProfileRepository] = None,
+    task_repo: Optional[TaskRepository] = None,
+    email_repo: Optional[EmailRepository] = None,
+    policy_engine: Optional[PermissionEngine] = None,
+    action_dispatcher: Optional[ActionDispatcher] = None,
+    supervisor: Optional[EmailOperationalSupervisor] = None,
 ) -> FastMCP:
     """Factory to create and configure the Alexa Business Autopilot MCP Server."""
 
@@ -60,6 +75,29 @@ def create_mcp_server(
     supplier_simulator = SupplierCatalogueSimulator()
     places = places_adapter or GooglePlacesAdapter()
     zoho = zoho_adapter or ZohoBooksAdapter()
+    adaptive_repo = profile_repo or AdaptiveProfileRepository(DEFAULT_DB_PATH)
+    orchestrator = AdaptiveBusinessOrchestrator(
+        repo=adaptive_repo,
+        approval_service=approvals,
+        places_adapter=places,
+        zoho_adapter=zoho,
+    )
+
+    # Phase 4: Task lifecycle and controlled execution services
+    _task_repo = task_repo or TaskRepository(db_path=DEFAULT_DB_PATH)
+    _email_repo = email_repo or EmailRepository(db_path=DEFAULT_DB_PATH)
+    _policy_engine = policy_engine or PermissionEngine()
+    _dispatcher = action_dispatcher or ActionDispatcher(
+        task_repo=_task_repo,
+        policy_engine=_policy_engine,
+    )
+    _supervisor = supervisor or EmailOperationalSupervisor(
+        email_repo=_email_repo,
+        task_repo=_task_repo,
+        profile_repo=adaptive_repo,
+        policy_engine=_policy_engine,
+    )
+
 
     # -------------------------------------------------------------------------
     # Tool 1: get_business_state
@@ -68,20 +106,53 @@ def create_mcp_server(
     def get_business_state(business_type: str = "home_tiffin") -> Dict[str, Any]:
         """
         Retrieves current business economics, starting inventory, daily capacity ceiling,
-        and cash parameters for the specified business profile.
+        and cash parameters for any specified business profile.
         """
-        prof = business_profiles.get(business_type, business_profiles.get("home_tiffin"))
+        adaptive_prof = adaptive_repo.get_profile(business_type)
+        if adaptive_prof:
+            selling_price = adaptive_prof.get_value("selling_price", 0.0)
+            unit_cost = adaptive_prof.get_value("unit_material_cost", adaptive_prof.get_value("supplier_unit_cost", 0.0))
+            capacity = adaptive_prof.get_value("daily_capacity", 0.0)
+            cash_bal = adaptive_prof.get_value("cash_balance", adaptive_prof.get_value("starting_capital", 10000.0))
+            return {
+                "status": "SUCCESS",
+                "business_type": adaptive_prof.business_id,
+                "display_name": adaptive_prof.display_name,
+                "category": adaptive_prof.category,
+                "selling_price": selling_price,
+                "supplier_unit_cost": unit_cost,
+                "daily_capacity": capacity,
+                "starting_inventory": adaptive_prof.get_value("current_inventory", 0.0),
+                "starting_capital": cash_bal,
+                "base_daily_demand": adaptive_prof.get_value("base_daily_demand", 0.0),
+                "daily_fixed_cost": adaptive_prof.get_value("daily_fixed_cost", 0.0),
+                "lead_time_days": adaptive_prof.get_value("procurement_lead_time_days", 1),
+                "is_adaptive": True,
+                "simulation_notice": SIMULATION_NOTICE,
+            }
+
+        if business_type in business_profiles:
+            prof = business_profiles[business_type]
+            return {
+                "status": "SUCCESS",
+                "business_type": prof.business_type,
+                "display_name": prof.display_name,
+                "selling_price": prof.selling_price,
+                "supplier_unit_cost": prof.supplier_unit_cost,
+                "daily_capacity": prof.daily_capacity,
+                "starting_inventory": prof.starting_inventory,
+                "starting_capital": prof.starting_capital,
+                "base_daily_demand": prof.base_daily_demand,
+                "daily_fixed_cost": prof.daily_fixed_cost,
+                "lead_time_days": prof.procurement_lead_time_days,
+                "is_adaptive": False,
+                "simulation_notice": SIMULATION_NOTICE,
+            }
+
         return {
-            "business_type": prof.business_type,
-            "display_name": prof.display_name,
-            "selling_price": prof.selling_price,
-            "supplier_unit_cost": prof.supplier_unit_cost,
-            "daily_capacity": prof.daily_capacity,
-            "starting_inventory": prof.starting_inventory,
-            "starting_capital": prof.starting_capital,
-            "base_daily_demand": prof.base_daily_demand,
-            "daily_fixed_cost": prof.daily_fixed_cost,
-            "lead_time_days": prof.procurement_lead_time_days,
+            "status": "NOT_FOUND",
+            "error": f"Business profile '{business_type}' was not found. Please onboard first.",
+            "business_type": business_type,
             "simulation_notice": SIMULATION_NOTICE,
         }
 
@@ -91,16 +162,41 @@ def create_mcp_server(
     @server.tool()
     def get_upcoming_orders(business_type: str = "home_tiffin") -> Dict[str, Any]:
         """
-        Retrieves scheduled baseline customer orders for tomorrow.
+        Retrieves scheduled baseline customer orders or bookings for tomorrow.
         """
-        prof = business_profiles.get(business_type, business_profiles.get("home_tiffin"))
-        # Baseline demand represents recurring daily subscriptions/orders
+        adaptive_prof = adaptive_repo.get_profile(business_type)
+        if adaptive_prof:
+            base_demand = float(adaptive_prof.get_value("base_daily_demand", 0.0))
+            capacity = float(adaptive_prof.get_value("daily_capacity", 0.0))
+            unit_label = orchestrator._get_unit_label(adaptive_prof.category)
+            return {
+                "status": "SUCCESS",
+                "business_type": adaptive_prof.business_id,
+                "display_name": adaptive_prof.display_name,
+                "category": adaptive_prof.category,
+                "scheduled_orders_tomorrow": round(base_demand, 0),
+                "order_type": f"Scheduled daily {unit_label}",
+                "capacity_ceiling": round(capacity, 0),
+                "available_capacity_headroom": max(0.0, round(capacity - base_demand, 0)),
+                "is_adaptive": True,
+            }
+
+        if business_type in business_profiles:
+            prof = business_profiles[business_type]
+            return {
+                "status": "SUCCESS",
+                "business_type": prof.business_type,
+                "scheduled_orders_tomorrow": round(prof.base_daily_demand, 0),
+                "order_type": "Daily subscription orders",
+                "capacity_ceiling": round(prof.daily_capacity, 0),
+                "available_capacity_headroom": max(0.0, round(prof.daily_capacity - prof.base_daily_demand, 0)),
+                "is_adaptive": False,
+            }
+
         return {
-            "business_type": prof.business_type,
-            "scheduled_orders_tomorrow": round(prof.base_daily_demand, 0),
-            "order_type": "Daily subscription tiffins",
-            "capacity_ceiling": round(prof.daily_capacity, 0),
-            "available_capacity_headroom": max(0.0, round(prof.daily_capacity - prof.base_daily_demand, 0)),
+            "status": "NOT_FOUND",
+            "error": f"Business profile '{business_type}' was not found. Please onboard first.",
+            "business_type": business_type,
         }
 
     # -------------------------------------------------------------------------
@@ -200,19 +296,42 @@ def create_mcp_server(
         and cash constraints. Returns decision (ACCEPT, ACCEPT_WITH_PROCUREMENT,
         ACCEPT_PARTIALLY, REJECT), tool trace, and natural voice response.
         """
-        prof = business_profiles.get(business_type, business_profiles.get("home_tiffin"))
-        orchestrator = BusinessAutopilotV2(profile=prof)
+        # 1. Check adaptive profile repository
+        adaptive_prof = adaptive_repo.get_profile(business_type)
+        if adaptive_prof:
+            return orchestrator.evaluate_opportunity(
+                profile=adaptive_prof,
+                additional_units=additional_orders,
+                current_demand=current_demand,
+                current_inventory=current_inventory,
+                total_cash=total_cash,
+                daily_capacity=daily_capacity,
+                safety_reserve=safety_reserve,
+                user_question=user_question,
+            )
 
-        decision: OpportunityDecision = orchestrator.evaluate_opportunity(
-            additional_orders=additional_orders,
-            current_demand=current_demand,
-            current_inventory=current_inventory,
-            total_cash=total_cash,
-            daily_capacity=daily_capacity,
-            cash_reserve_target=safety_reserve,
-            user_question=user_question,
-        )
-        return decision.to_dict()
+        # 2. Check static profiles
+        if business_type in business_profiles:
+            v2_engine = BusinessAutopilotV2(profile=business_profiles[business_type])
+            decision: OpportunityDecision = v2_engine.evaluate_opportunity(
+                additional_orders=additional_orders,
+                current_demand=current_demand,
+                current_inventory=current_inventory,
+                total_cash=total_cash,
+                daily_capacity=daily_capacity,
+                cash_reserve_target=safety_reserve,
+                user_question=user_question,
+            )
+            return decision.to_dict()
+
+        # 3. Fail closed if not found
+        return {
+            "status": "NOT_FOUND",
+            "decision": "REJECT",
+            "error": f"Business profile '{business_type}' was not found. Please onboard first.",
+            "business_type": business_type,
+            "simulation_notice": SIMULATION_NOTICE,
+        }
 
     # -------------------------------------------------------------------------
     # Tool 8: create_purchase_plan
@@ -490,4 +609,298 @@ def create_mcp_server(
             },
         }
 
+    # -------------------------------------------------------------------------
+    # Tool 20: onboard_or_chat_business (Adaptive Business Onboarding & Chat)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def onboard_or_chat_business(
+        message: str,
+        business_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Conversational onboarding and interaction for ANY Indian micro-enterprise.
+        Extracts facts (prices, materials, capacity, cash, overhead), tracks provenance,
+        identifies missing fields, handles corrections, and answers business queries.
+        """
+        return orchestrator.handle_user_message(message=message, business_id=business_id)
+
+    # -------------------------------------------------------------------------
+    # Tool 21: get_adaptive_business_profile
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def get_adaptive_business_profile(business_id: str) -> Dict[str, Any]:
+        """
+        Retrieves the complete profile and granular fact breakdown (confirmed,
+        assumed, outdated) for an onboarded business.
+        """
+        profile = adaptive_repo.get_profile(business_id)
+        if not profile:
+            return {"status": "NOT_FOUND", "business_id": business_id, "error": "Profile not found"}
+        return {
+            "status": "SUCCESS",
+            "profile": profile.to_dict(),
+        }
+
+    # -------------------------------------------------------------------------
+    # Tool 22: list_adaptive_business_profiles
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def list_adaptive_business_profiles() -> List[Dict[str, Any]]:
+        """
+        Lists all onboarded business profiles with their categories and fact counts.
+        """
+        return adaptive_repo.list_profiles()
+
+    # -------------------------------------------------------------------------
+    # Tool 23: evaluate_adaptive_opportunity
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def evaluate_adaptive_opportunity(
+        business_id: str,
+        additional_orders: float = 5.0,
+    ) -> Dict[str, Any]:
+        """
+        Evaluates whether an onboarded business can take on additional demand.
+        Uses universal constraints (capacity, materials, usable cash) without
+        assuming food/tiffin recipes for non-food businesses.
+        """
+        profile = adaptive_repo.get_profile(business_id)
+        if not profile:
+            return {"status": "NOT_FOUND", "business_id": business_id, "error": "Profile not found"}
+        return orchestrator.evaluate_opportunity(profile=profile, additional_units=additional_orders)
+
+    # -------------------------------------------------------------------------
+    # Tool 24: list_operational_tasks
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def list_operational_tasks(
+        business_id: str,
+        state: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        Lists operational tasks for a business, optionally filtered by lifecycle state.
+        Strictly tenant-isolated.
+        """
+        task_state = TaskState(state) if state and state in TaskState._value2member_map_ else None
+        tasks = _task_repo.list_tasks(business_id=business_id, state=task_state, limit=limit)
+        return [t.to_dict() for t in tasks]
+
+    # -------------------------------------------------------------------------
+    # Tool 25: get_operational_task
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def get_operational_task(task_id: str, business_id: str) -> Dict[str, Any]:
+        """
+        Retrieves detailed operational task state, including action proposals and audit trail.
+        """
+        task = _task_repo.get_task(task_id, business_id=business_id)
+        if not task:
+            return {"status": "NOT_FOUND", "error": f"Task '{task_id}' not found for business '{business_id}'."}
+        actions = _task_repo.list_actions_for_task(task_id, business_id=business_id)
+        audit_log = _task_repo.get_audit_log(task_id, business_id=business_id)
+        result = task.to_dict()
+        result["actions"] = [a.to_dict() for a in actions]
+        result["audit_trail"] = audit_log
+        return {"status": "SUCCESS", "task": result}
+
+    # -------------------------------------------------------------------------
+    # Tool 26: list_pending_approvals
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def list_pending_approvals(business_id: str) -> List[Dict[str, Any]]:
+        """
+        Lists all action proposals currently awaiting owner approval for a business.
+        """
+        actions = _task_repo.list_pending_actions(business_id=business_id)
+        return [a.to_dict() for a in actions]
+
+    # -------------------------------------------------------------------------
+    # Tool 27: get_action_proposal
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def get_action_proposal(action_id: str, business_id: str) -> Dict[str, Any]:
+        """
+        Retrieves a structured action proposal with its immutable payload hash and approval status.
+        """
+        proposal = _task_repo.get_action(action_id, business_id=business_id)
+        if not proposal:
+            return {"status": "NOT_FOUND", "error": f"Action proposal '{action_id}' not found."}
+        return {"status": "SUCCESS", "action": proposal.to_dict()}
+
+    # -------------------------------------------------------------------------
+    # Tool 28: approve_action_proposal
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def approve_action_proposal(
+        action_id: str,
+        business_id: str,
+        actor_id: str,
+        execution_payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Approves an action proposal. Requires authenticated owner authorization.
+        Validates exact payload hash binding to prevent tampering.
+        """
+        if not _policy_engine.is_authorized_owner(business_id, actor_id):
+            return {
+                "status": "UNAUTHORIZED",
+                "error": f"Actor '{actor_id}' is not an authorized owner for business '{business_id}'.",
+            }
+        proposal = _task_repo.get_action(action_id, business_id=business_id)
+        if not proposal:
+            return {"status": "NOT_FOUND", "error": f"Action proposal '{action_id}' not found."}
+
+        payload = execution_payload if execution_payload is not None else proposal.payload
+        try:
+            approved = _task_repo.approve_action(
+                action_id=action_id,
+                business_id=business_id,
+                actor_id=actor_id,
+                execution_payload=payload,
+                policy_engine=_policy_engine,
+            )
+            return {"status": "APPROVED", "action": approved.to_dict()}
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Tool 29: reject_action_proposal
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def reject_action_proposal(
+        action_id: str,
+        business_id: str,
+        actor_id: str,
+        rejection_reason: str,
+    ) -> Dict[str, Any]:
+        """
+        Rejects an action proposal with documented rationale. Requires authenticated owner.
+        """
+        if not _policy_engine.is_authorized_owner(business_id, actor_id):
+            return {
+                "status": "UNAUTHORIZED",
+                "error": f"Actor '{actor_id}' is not an authorized owner for business '{business_id}'.",
+            }
+        try:
+            rejected = _task_repo.reject_action(
+                action_id=action_id,
+                business_id=business_id,
+                actor_id=actor_id,
+                rejection_reason=rejection_reason,
+            )
+            return {"status": "REJECTED", "action": rejected.to_dict()}
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Tool 30: dispatch_action
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def dispatch_action(
+        action_id: str,
+        business_id: str,
+        actor_id: str,
+        execution_payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Executes an action proposal through the controlled ActionDispatcher.
+        Enforces policy re-evaluation, hash verification, approval check, durable idempotency,
+        and failure recovery. Never calls live external services.
+        """
+        try:
+            receipt = _dispatcher.dispatch_action(
+                action_id=action_id,
+                business_id=business_id,
+                actor_id=actor_id,
+                execution_payload=execution_payload,
+            )
+            return {"status": receipt.status, "receipt": asdict(receipt)}
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Tool 31: list_execution_history
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def list_execution_history(
+        business_id: str,
+        task_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        Lists execution receipts and records for a business or specific task.
+        """
+        if task_id:
+            return _task_repo.list_executions_for_task(task_id, business_id=business_id)
+        return _task_repo.list_executions_for_business(business_id=business_id, limit=limit)
+
+    # -------------------------------------------------------------------------
+    # Tool 32: reconcile_uncertain_execution
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def reconcile_uncertain_execution(
+        action_id: str,
+        business_id: str,
+        actor_id: str,
+        resolution: str,
+        notes: str,
+    ) -> Dict[str, Any]:
+        """
+        Explicit owner-directed reconciliation for an action in EXECUTION_UNCERTAIN state.
+        Never retries automatically. Resolution must be 'CONFIRM_EXECUTED' or 'CONFIRM_FAILED'.
+        """
+        if not _policy_engine.is_authorized_owner(business_id, actor_id):
+            return {
+                "status": "UNAUTHORIZED",
+                "error": f"Actor '{actor_id}' is not an authorized owner for business '{business_id}'.",
+            }
+        try:
+            receipt = _dispatcher.reconcile_uncertain_action(
+                action_id=action_id,
+                business_id=business_id,
+                actor_id=actor_id,
+                resolution=resolution,
+                notes=notes,
+            )
+            return {"status": receipt.status, "receipt": asdict(receipt)}
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Tool 33: process_incoming_email
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def process_incoming_email(
+        email_id: str,
+        business_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Triggers supervisor analysis for an ingested email.
+        Creates/links operational task, classifies intent, retrieves business knowledge,
+        and proposes authorized actions.
+        """
+        email = _email_repo.get_by_id(email_id, business_id=business_id)
+        if not email:
+            return {"status": "NOT_FOUND", "error": f"Email '{email_id}' not found for business '{business_id}'."}
+        try:
+            outcome = _supervisor.process_email(email)
+            return {
+                "status": "PROCESSED",
+                "task_id": outcome.task.task_id,
+                "classification": outcome.classification.to_dict() if hasattr(outcome.classification, "to_dict") else asdict(outcome.classification),
+                "proposals_count": len(outcome.action_proposals),
+            }
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
     return server
+
+
+
+# Default server instance for module-level import
+server: FastMCP = create_mcp_server()
+
+
+if __name__ == "__main__":
+    server.run("stdio")

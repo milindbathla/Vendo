@@ -53,8 +53,13 @@ class PlanItemRow:
     unit_price: float
     total_price: float
 
+    @property
+    def item_name(self) -> str:
+        return self.ingredient_name
+
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "item_name":       self.ingredient_name,
             "ingredient_name": self.ingredient_name,
             "display_name":    self.display_name,
             "quantity":        round(self.quantity, 2),
@@ -237,8 +242,8 @@ class PlanRepository:
                     """,
                     (
                         pid,
-                        it["ingredient_name"],
-                        it.get("display_name", it["ingredient_name"].replace("_", " ").title()),
+                        it.get("item_name") or it.get("ingredient_name", "item"),
+                        it.get("display_name", (it.get("item_name") or it.get("ingredient_name", "item")).replace("_", " ").title()),
                         float(it["quantity"]),
                         it.get("unit", "units"),
                         float(it["unit_price"]),

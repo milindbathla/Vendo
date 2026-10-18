@@ -32,6 +32,10 @@ class SupplierItemQuote:
     is_bulk_discount_applied: bool
     moq_applied: bool
 
+    @property
+    def item_name(self) -> str:
+        return self.ingredient_name
+
 
 @dataclass
 class SupplierQuote:
@@ -109,7 +113,47 @@ class SupplierCatalogueSimulator:
                 "containers": {"unit_price": 7.5, "bulk_price": 7.0, "bulk_threshold": 50.0, "moq": 10.0},
             },
         },
+        "textile_wholesaler": {
+            "id": "textile_wholesaler",
+            "name": "Surat & Delhi Textile Wholesalers",
+            "is_express": False,
+            "lead_time_hours": 48,
+            "lead_time_days": 2,
+            "delivery_fee": 120.0,
+            "free_delivery_above": 5000.0,
+            "pricing": {
+                "plain_shirts": {"unit_price": 380.0, "bulk_price": 340.0, "bulk_threshold": 20.0, "moq": 5.0},
+                "cotton_fabric_meters": {"unit_price": 180.0, "bulk_price": 150.0, "bulk_threshold": 30.0, "moq": 10.0},
+                "buttons_threads": {"unit_price": 25.0, "bulk_price": 20.0, "bulk_threshold": 50.0, "moq": 10.0},
+                "garment_packaging": {"unit_price": 12.0, "bulk_price": 9.0, "bulk_threshold": 50.0, "moq": 20.0},
+            },
+        },
+        "auto_parts_distributor": {
+            "id": "auto_parts_distributor",
+            "name": "National Auto Spares & Parts Depot",
+            "is_express": False,
+            "lead_time_hours": 24,
+            "lead_time_days": 1,
+            "delivery_fee": 80.0,
+            "free_delivery_above": 3000.0,
+            "pricing": {
+                "brake_pads": {"unit_price": 220.0, "bulk_price": 190.0, "bulk_threshold": 10.0, "moq": 2.0},
+                "engine_oil_litre": {"unit_price": 320.0, "bulk_price": 290.0, "bulk_threshold": 10.0, "moq": 3.0},
+                "air_filters": {"unit_price": 150.0, "bulk_price": 130.0, "bulk_threshold": 10.0, "moq": 2.0},
+                "spark_plugs": {"unit_price": 95.0, "bulk_price": 80.0, "bulk_threshold": 20.0, "moq": 4.0},
+            },
+        },
     }
+
+    def get_suppliers_for_category(self, category: str) -> List[Dict[str, Any]]:
+        """Returns compatible suppliers for the given business category."""
+        if category in ("clothing_retail", "tailoring_boutique"):
+            return [self.CATALOGUE["textile_wholesaler"]]
+        elif category in ("mechanical_repair", "electronics_repair"):
+            return [self.CATALOGUE["auto_parts_distributor"]]
+        elif category in ("home_tiffin", "food_catering", "home_bakery"):
+            return [self.CATALOGUE["wholesale_mandi"], self.CATALOGUE["kirana_express"]]
+        return list(self.CATALOGUE.values())
 
     def get_quote(
         self,
@@ -153,13 +197,18 @@ class SupplierCatalogueSimulator:
             item_total = order_qty * effective_price
             subtotal += item_total
 
+            item_unit = pricing_info.get(
+                "unit",
+                "kg" if ing_name in ("rice", "dal") else ("litres" if ing_name == "cooking_oil" else "units")
+            )
+
             item_quotes.append(
                 SupplierItemQuote(
                     ingredient_name=ing_name,
                     display_name=ing_name.replace("_", " ").title(),
                     requested_qty=qty,
                     order_qty=order_qty,
-                    unit="kg" if ing_name in ("rice", "dal") else ("litres" if ing_name == "cooking_oil" else "units"),
+                    unit=item_unit,
                     unit_price=effective_price,
                     total_price=item_total,
                     is_bulk_discount_applied=is_bulk,
@@ -184,11 +233,48 @@ class SupplierCatalogueSimulator:
 
     def compare_procurement_channels(
         self,
-        needed_ingredients: Dict[str, float],
+        needed_ingredients: Optional[Dict[str, float]] = None,
+        needed_items: Optional[Dict[str, float]] = None,
+        category: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Compares regular wholesale delivery against urgent local delivery."""
-        wholesale_quote = self.get_quote("wholesale_mandi", needed_ingredients)
-        express_quote = self.get_quote("kirana_express", needed_ingredients)
+        """Compares regular wholesale delivery against urgent local delivery for any vertical."""
+        items = needed_items if needed_items is not None else (needed_ingredients or {})
+
+        # Determine best supplier pair based on category or items
+        is_textile = (
+            category in ("clothing_retail", "tailoring_boutique")
+            or any(k in self.CATALOGUE["textile_wholesaler"]["pricing"] for k in items)
+        )
+        is_auto = (
+            category in ("mechanical_repair", "electronics_repair")
+            or any(k in self.CATALOGUE["auto_parts_distributor"]["pricing"] for k in items)
+        )
+
+        if is_textile:
+            primary_quote = self.get_quote("textile_wholesaler", items)
+            return {
+                "simulation_notice": SIMULATION_NOTICE,
+                "category": "clothing_retail",
+                "wholesale": primary_quote.to_dict(),
+                "primary_supplier": primary_quote.to_dict(),
+                "suppliers_evaluated": ["textile_wholesaler"],
+                "cost_difference": 0.0,
+                "lead_time_difference_hours": 0,
+            }
+        elif is_auto:
+            primary_quote = self.get_quote("auto_parts_distributor", items)
+            return {
+                "simulation_notice": SIMULATION_NOTICE,
+                "category": "mechanical_repair",
+                "wholesale": primary_quote.to_dict(),
+                "primary_supplier": primary_quote.to_dict(),
+                "suppliers_evaluated": ["auto_parts_distributor"],
+                "cost_difference": 0.0,
+                "lead_time_difference_hours": 0,
+            }
+
+        wholesale_quote = self.get_quote("wholesale_mandi", items)
+        express_quote = self.get_quote("kirana_express", items)
 
         return {
             "simulation_notice": SIMULATION_NOTICE,
