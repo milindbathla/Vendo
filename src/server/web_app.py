@@ -150,6 +150,17 @@ app.mount("/sse", mcp_server.sse_app())
 from src.server.auth_routes import router as auth_router
 app.include_router(auth_router)
 
+# Mount frontend demo API (read-only demo.db + Gemini-backed chat) and the SPA
+from src.server.demo_api import router as demo_router
+app.include_router(demo_router)
+
+from pathlib import Path as _Path
+from fastapi.staticfiles import StaticFiles
+_FRONTEND_DIR = _Path(__file__).resolve().parents[2] / "frontend"
+if _FRONTEND_DIR.is_dir():
+    # Served at /app/ (onboarding) and /app/alexa.html (Alexa+ simulator)
+    app.mount("/app", StaticFiles(directory=str(_FRONTEND_DIR), html=True), name="frontend")
+
 
 # -----------------------------------------------------------------------------
 # Request & Response Models

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>alexa+ vendo — ask your shop</title>
+<meta name="description" content="Talk to Alexa+ about your business. See the live data behind every answer.">
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-dark">
+<div class="sim">
+
+  <!-- Top bar -->
+  <header class="sim__top">
+    <a class="brand" href="index.html"><img src="assets/logo.png" alt="alexa+ vendo"></a>
+    <div class="ctx">
+      <div class="biz"><b id="bizName">Loading…</b><small id="bizMeta"></small></div>
+      <span class="mode" id="modePill">· connecting</span>
+    </div>
+  </header>
+
+  <!-- Body: chat + visual panel -->
+  <div class="sim__body">
+
+    <!-- Chat -->
+    <section class="chat">
+      <div class="chat__scroll" id="chatScroll" aria-live="polite"></div>
+      <div class="suggests" id="suggests"></div>
+      <form class="composer" id="composer">
+        <button type="button" class="mic" id="mic" aria-label="Voice (simulated)">
+          <span class="eq"><i></i><i></i><i></i><i></i><i></i></span>
+        </button>
+        <input id="msg" autocomplete="off" placeholder="Ask about today's cash, stock, invoices, reviews…">
+        <button class="send" type="submit">Ask</button>
+      </form>
+    </section>
+
+    <!-- Visual panel -->
+    <aside class="panel" id="panel">
+      <div class="panel__empty" id="panelEmpty">
+        <div class="orb"><span class="eq"><i style="height:40%"></i><i style="height:80%"></i><i style="height:55%"></i><i style="height:95%"></i><i style="height:35%"></i></span></div>
+        <div>
+          <div style="color:var(--plum);font-weight:700;font-size:1.3rem">What Alexa+ sees</div>
+          <div style="font-size:1rem;max-width:34ch;margin-top:6px">Ask a question on the left. The data it pulls, your invoices, stock, cash and neighbourhood, shows up here.</div>
+        </div>
+      </div>
+      <div id="panelBody" hidden>
+        <div class="panel__head">
+          <div><div class="label" id="panelLabel"></div><h2 id="panelTitle"></h2></div>
+          <span class="live"><span class="d"></span><span id="panelSource">demo.db</span></span>
+        </div>
+        <p class="panel__hint" id="panelHint"></p>
+        <div id="panelCards"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

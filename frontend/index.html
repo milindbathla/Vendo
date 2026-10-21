@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up alexa+ vendo</title>
+<meta name="description" content="Connect your shop's accounts so Alexa+ can run your day.">
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="onboard">
+
+  <!-- Left rail -->
+  <aside class="onboard__rail">
+    <a class="brand" href="#"><img src="assets/logo.png" alt="alexa+ vendo"></a>
+    <div>
+      <p class="rail-lead">Hand Alexa+ the keys to the <b>back office</b>, keep your hands on the <b>table</b>.</p>
+      <p class="rail-sub">Connect the accounts your shop already uses. Alexa+ reads them so you can just ask.</p>
+    </div>
+    <ol class="steps">
+      <li class="active"><span class="n">1</span><span><span class="st">Your business</span><span class="sd">Name, GST, location</span></span></li>
+      <li><span class="n">2</span><span><span class="st">Connect accounts</span><span class="sd">Payments, books, reviews</span></span></li>
+      <li><span class="n">3</span><span><span class="st">How you run</span><span class="sd">Cash buffer, timings</span></span></li>
+    </ol>
+  </aside>
+
+  <!-- Main -->
+  <main class="onboard__main">
+    <div class="awning" aria-hidden="true"></div>
+    <div class="inner">
+      <div class="page-head">
+        <h1>Let's get your shop on Alexa+</h1>
+        <p>Fill this once. Alexa+ uses it to read your sales, stock, invoices and neighbourhood, then answers out loud when you ask.</p>
+      </div>
+
+      <form id="setupForm" novalidate>
+
+        <!-- 1. Business -->
+        <section class="card">
+          <header><span class="idx">01</span><h2>Your business</h2><span class="hint">Shown to you only</span></header>
+          <div class="field-grid">
+            <div class="field col-2">
+              <label for="biz">Business name</label>
+              <input id="biz" name="business_name" placeholder="e.g. Maa Ki Rasoi Cloud Kitchen" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="owner">Owner name</label>
+              <input id="owner" name="owner_name" placeholder="e.g. Sunita Sharma" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="phone">Phone <span class="sub">(for order updates)</span></label>
+              <input id="phone" name="phone" placeholder="+91  XXXXX XXXXX" inputmode="tel">
+            </div>
+            <div class="field">
+              <label for="archetype">Type of business</label>
+              <select id="archetype" name="archetype">
+                <option value="" disabled selected>Choose one…</option>
+                <option>Tiffin / cloud kitchen</option>
+                <option>Kirana / general store</option>
+                <option>Bakery</option>
+                <option>Salon / services</option>
+                <option>Tailoring / boutique</option>
+                <option>Light manufacturing</option>
+                <option>Reseller / distribution</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="gstin">GSTIN <span class="sub">(optional)</span></label>
+              <input id="gstin" name="gstin" placeholder="09ZZZZZ9999Z1Z5" class="mono" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="locality">Locality</label>
+              <input id="locality" name="locality" placeholder="e.g. Kakadeo" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="city">City</label>
+              <input id="city" name="city" placeholder="e.g. Kanpur" autocomplete="off">
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Connect accounts -->
+        <section class="card">
+          <header><span class="idx">02</span><h2>Connect your accounts</h2>
+            <span class="hint">You stay in control, revoke anytime</span></header>
+          <p class="desc">You'll be taken to each service to approve access. We only ever receive a secure token, never your password.</p>
+
+          <div class="connect-row" data-state="required">
+            <div class="ic">a<span style="color:var(--amber-deep)">·</span></div>
+            <div class="meta"><b>Amazon Pay</b><small>Payments, settlements &amp; refunds</small></div>
+            <div class="scope">Read payment status &amp; history</div>
+            <span class="pill req">Needed</span>
+            <button type="button" class="btn-connect" data-provider="Amazon Pay">Connect</button>
+          </div>
+
+          <div class="connect-row" data-state="required">
+            <div class="ic">Z</div>
+            <div class="meta"><b>Zoho Books</b><small>Invoices, bills &amp; accounts</small></div>
+            <div class="scope">Read invoices, bills &amp; ledgers</div>
+            <span class="pill req">Needed</span>
+            <button type="button" class="btn-connect" data-provider="Zoho Books">Connect</button>
+          </div>
+
+          <div class="connect-row">
+            <div class="ic">G</div>
+            <div class="meta"><b>Google Business</b><small>Reviews &amp; appointments</small></div>
+            <div class="scope">Read reviews &amp; calendar</div>
+            <span class="pill opt">Optional</span>
+            <button type="button" class="btn-connect" data-provider="Google">Connect</button>
+          </div>
+
+          <div class="connect-row">
+            <div class="ic">◎</div>
+            <div class="meta"><b>Instagram &amp; Facebook</b><small>Posts, reach &amp; engagement</small></div>
+            <div class="scope">Read insights, publish posts</div>
+            <span class="pill opt">Optional</span>
+            <button type="button" class="btn-connect" data-provider="Meta">Connect</button>
+          </div>
+        </section>
+
+        <!-- 3. How you run the business -->
+        <section class="card">
+          <header><span class="idx">03</span><h2>How you run the business</h2>
+            <span class="hint">Alexa+ respects these limits</span></header>
+          <p class="desc">The first few help Alexa+ stay safe with your money and time. The optional ones sharpen its advice, fill them whenever you have a minute.</p>
+          <div class="field-grid">
+            <div class="field">
+              <label for="buffer">Minimum cash buffer <span class="sub">(never spend below)</span></label>
+              <div class="with-prefix"><span>₹</span><input id="buffer" name="min_cash_buffer" placeholder="5000" inputmode="numeric" class="mono"></div>
+            </div>
+            <div class="field">
+              <label for="maxout">Maximum output per day</label>
+              <input id="maxout" name="max_per_day" placeholder="40 orders" inputmode="numeric">
+            </div>
+            <div class="field">
+              <label for="cutoff">Order cut-off time</label>
+              <input id="cutoff" name="order_cutoff" placeholder="20:00" class="mono">
+            </div>
+            <div class="field">
+              <label for="cook">Production starts</label>
+              <input id="cook" name="cooking_start" placeholder="09:00" class="mono">
+            </div>
+            <div class="field">
+              <label for="open">Opening time <span class="sub">(optional)</span></label>
+              <input id="open" name="open_time" placeholder="08:00" class="mono">
+            </div>
+            <div class="field">
+              <label for="close">Closing time <span class="sub">(optional)</span></label>
+              <input id="close" name="close_time" placeholder="22:00" class="mono">
+            </div>
+            <div class="field">
+              <label for="dayoff">Weekly day off <span class="sub">(optional)</span></label>
+              <select id="dayoff" name="weekly_day_off">
+                <option value="" selected>None</option>
+                <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
+                <option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="radius">Delivery radius <span class="sub">(optional)</span></label>
+              <div class="with-prefix"><span>km</span><input id="radius" name="delivery_radius_km" placeholder="5" inputmode="numeric" class="mono"></div>
+            </div>
+            <div class="field">
+              <label for="fastfee">Fast delivery fee <span class="sub">(optional)</span></label>
+              <div class="with-prefix"><span>₹</span><input id="fastfee" name="fast_delivery_fee" placeholder="49" inputmode="numeric" class="mono"></div>
+            </div>
+            <div class="field">
+              <label for="credit">Supplier credit days <span class="sub">(optional)</span></label>
+              <input id="credit" name="supplier_credit_days" placeholder="7 days" inputmode="numeric">
+            </div>
+            <div class="field">
+              <label for="busiest">Busiest time of day <span class="sub">(optional)</span></label>
+              <select id="busiest" name="busiest_time">
+                <option value="" selected disabled>Choose one...</option>
+                <option>Morning</option><option>Afternoon</option><option>Evening</option><option>Late night</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="lang">Preferred language <span class="sub">(optional)</span></label>
+              <select id="lang" name="language">
+                <option value="" selected disabled>Choose one...</option>
+                <option>Hindi</option><option>English</option><option>Hinglish</option><option>Bhojpuri</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <div class="actions">
+          <button type="submit" class="btn-primary">
+            <span class="brand"><img src="assets/logo.png" alt="" style="height:20px;filter:brightness(0) invert(1)"></span>
+            Activate Alexa+
+          </button>
+          <button type="button" class="btn-ghost" id="previewLink">Skip for now, see the demo</button>
+          <span class="note">Nothing is saved yet · you can edit all of this later</span>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"><span class="dot"></span><span id="toastMsg"></span></div>
+
+<script>
+  // Design-only: the form is intentionally NOT wired to the MCP yet.
+  const toast = document.getElementById('toast'), tmsg = document.getElementById('toastMsg');
+  let tTimer;
+  function showToast(msg){ tmsg.textContent = msg; toast.classList.add('show');
+    clearTimeout(tTimer); tTimer = setTimeout(()=>toast.classList.remove('show'), 3200); }
+
+  document.querySelectorAll('.btn-connect').forEach(b=>{
+    b.addEventListener('click', ()=> showToast(`${b.dataset.provider} connect flow isn't linked yet. Design preview.`));
+  });
+  document.getElementById('setupForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    showToast("Not wired to the MCP yet. This screen is a design preview.");
+  });
+  document.getElementById('previewLink').addEventListener('click', ()=> location.href = 'alexa.html');
+</script>
+</body>
+</html>
