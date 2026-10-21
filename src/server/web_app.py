@@ -92,15 +92,6 @@ state_repo          = BusinessStateRepository(_DB_PATH)
 places_adapter      = GooglePlacesAdapter()
 zoho_adapter        = ZohoBooksAdapter()
 adaptive_repo       = AdaptiveProfileRepository(_DB_PATH)
-orchestrator        = AdaptiveBusinessOrchestrator(
-    repo=adaptive_repo,
-    approval_service=approvals_service,
-    places_adapter=places_adapter,
-    zoho_adapter=zoho_adapter,
-)
-amazon_pay_adapter = AmazonPayAdapter()
-meta_adapter       = MetaAdapter()
-
 
 # Phase 4 services
 task_repo           = TaskRepository(_DB_PATH)
@@ -114,6 +105,20 @@ supervisor          = EmailOperationalSupervisor(
     policy_engine=policy_engine,
 )
 doc_onboarding_service = DocumentOnboardingService(repo=adaptive_repo)
+
+orchestrator        = AdaptiveBusinessOrchestrator(
+    repo=adaptive_repo,
+    approval_service=approvals_service,
+    places_adapter=places_adapter,
+    zoho_adapter=zoho_adapter,
+    task_repo=task_repo,
+    email_repo=email_repo,
+    supervisor=supervisor,
+    action_dispatcher=action_dispatcher,
+    policy_engine=policy_engine,
+)
+amazon_pay_adapter = AmazonPayAdapter()
+meta_adapter       = MetaAdapter()
 
 # Create official MCP server instance (shares the same service instances)
 mcp_server = create_mcp_server(
@@ -140,6 +145,10 @@ app = FastAPI(
 # Mount MCP endpoints (Streamable HTTP & SSE)
 app.mount("/mcp", mcp_server.streamable_http_app())
 app.mount("/sse", mcp_server.sse_app())
+
+# Mount OAuth connection management routes
+from src.server.auth_routes import router as auth_router
+app.include_router(auth_router)
 
 
 # -----------------------------------------------------------------------------
@@ -445,6 +454,7 @@ class FactUpdateRequest(BaseModel):
     value: Any = Field(..., description="Fact value")
     status: str = Field(default="confirmed", description="confirmed, assumed, unknown, or outdated")
     notes: str = Field(default="", description="Reason or context for update")
+    actor_id: Optional[str] = Field(default=None, description="Actor performing update")
 
 
 @app.post("/api/onboarding/chat")
@@ -473,38 +483,45 @@ def get_business_profile_endpoint(business_id: str):
 
 
 @app.put("/api/business/{business_id}/facts")
-def update_business_fact_endpoint(business_id: str, req: FactUpdateRequest):
-    """Explicitly corrects or updates a specific business fact."""
+def update_business_fact_endpoint(
+    business_id: str,
+    req: FactUpdateRequest,
+    x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
+    x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
+):
+    """Explicitly corrects or updates a specific business fact with owner authorization."""
+    actor_id = resolve_actor_id(req.actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
+    enforce_owner_authorization(business_id, actor_id)
+
     profile = adaptive_repo.get_profile(business_id)
     if not profile:
         raise HTTPException(status_code=404, detail=f"Business profile '{business_id}' not found")
     fact = profile.set_fact(
         key=req.key,
         value=req.value,
-        status=FactStatus(req.status),
+        status=FactStatus(req.status.lower() if isinstance(req.status, str) else req.status),
         source=FactSource.USER_STATED,
-        notes=req.notes,
+        notes=req.notes or f"Updated by owner {actor_id}",
     )
     adaptive_repo.save_profile(profile)
     return {"status": "SUCCESS", "fact": fact.to_dict()}
 
 
 @app.delete("/api/business/{business_id}")
-def delete_business_profile_endpoint(business_id: str):
-    """Deletes an adaptive business profile."""
+def delete_business_profile_endpoint(
+    business_id: str,
+    actor_id: Optional[str] = Query(None),
+    x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
+    x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
+):
+    """Deletes an adaptive business profile with owner authorization."""
+    actor = resolve_actor_id(actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
+    enforce_owner_authorization(business_id, actor)
+
     success = adaptive_repo.delete_profile(business_id)
     if not success:
         raise HTTPException(status_code=404, detail=f"Business profile '{business_id}' not found")
     return {"status": "SUCCESS", "deleted": business_id}
-
-
-@app.post("/api/orchestrator/query")
-def orchestrator_query_endpoint(req: OnboardingChatRequest):
-    """
-    General-purpose orchestrator endpoint to analyze decisions, check profitability,
-    scout competitors, or review accounting for an onboarded business.
-    """
-    return orchestrator.handle_user_message(message=req.message, business_id=req.business_id)
 
 
 # -----------------------------------------------------------------------------
@@ -570,14 +587,19 @@ def resolve_actor_id(
     x_autopilot_actor_id: Optional[str] = None,
     x_autopilot_owner_id: Optional[str] = None,
 ) -> str:
-    env = os.environ.get("AUTOPILOT_ENV", AUTOPILOT_ENV).lower()
+    env = os.environ.get("AUTOPILOT_ENV", "development").lower()
     if env == "production":
         raise HTTPException(
             status_code=403,
-            detail="Demo header-based authentication is strictly disabled in production mode. Production deployment requires JWT / OAuth2 middleware.",
+            detail="Header-based simulated authentication is strictly disabled in production mode. Verified OAuth2/JWT authentication required.",
         )
     actor = body_actor_id or x_autopilot_actor_id or x_autopilot_owner_id
-    return actor or "anonymous_caller"
+    if not actor or not actor.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required: No actor or owner identity provided in request or headers.",
+        )
+    return actor.strip()
 
 
 def enforce_owner_authorization(business_id: str, actor_id: str) -> None:
@@ -875,6 +897,44 @@ def verify_fact_endpoint(
     )
     adaptive_repo.save_profile(profile)
     return {"status": "SUCCESS", "fact": updated_fact.to_dict()}
+
+
+class OrchestratorQueryRequest(BaseModel):
+    business_id: str
+    message: str
+    actor_id: Optional[str] = None
+
+
+@app.post("/api/orchestrator/query")
+def orchestrator_query_endpoint(
+    req: OrchestratorQueryRequest,
+    x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
+    x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
+):
+    """
+    Central operational assistant endpoint.
+    Processes natural-language queries, briefings, follow-ups, and operational requests.
+    """
+    actor_id = resolve_actor_id(req.actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
+    return orchestrator.handle_user_message(
+        message=req.message,
+        business_id=req.business_id,
+        actor_id=actor_id,
+    )
+
+
+@app.get("/api/orchestrator/briefing")
+def orchestrator_briefing_endpoint(
+    business_id: str = Query(...),
+    actor_id: Optional[str] = Query(None),
+    x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
+    x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
+):
+    """
+    Returns a proactive daily operational briefing and voice-friendly summary.
+    """
+    actor = resolve_actor_id(actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
+    return orchestrator.generate_daily_briefing(business_id=business_id, actor_id=actor)
 
 
 @app.get("/")

@@ -28,10 +28,20 @@ logger = logging.getLogger(__name__)
 # Resolved relative to the project root at import time.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # Canonical database: the seeded demo.db shared with the specialist agents.
-# The autopilot's own runtime tables (autopilot_*) are created additively here
-# and never collide with the teammate-owned domain tables.
+# This file is strictly protected and MUST NEVER be mutated by autopilot DDL or seeding.
+CANONICAL_DEMO_DB_PATH: str = str((_PROJECT_ROOT / "data" / "demo.db").resolve())
+
+def is_canonical_demo_db(db_path: str) -> bool:
+    """Returns True if the target database path points to the protected canonical demo.db."""
+    try:
+        if not db_path or db_path == ":memory:":
+            return False
+        return Path(db_path).resolve() == Path(CANONICAL_DEMO_DB_PATH).resolve()
+    except Exception:
+        return False
+
 DEFAULT_DB_PATH: str = os.environ.get(
-    "DATABASE_PATH", str(_PROJECT_ROOT / "data" / "demo.db")
+    "DATABASE_PATH", str(_PROJECT_ROOT / "data" / "runtime_autopilot.sqlite3")
 )
 _PROFILES_JSON: Path = _PROJECT_ROOT / "data" / "business_profiles.json"
 
@@ -205,6 +215,12 @@ def initialize_database(
     remains open. If *conn* is None, a new connection is opened for *db_path*,
     DDL is applied, and the connection is closed.
     """
+    if is_canonical_demo_db(db_path):
+        raise PermissionError(
+            f"Direct schema mutation of canonical '{CANONICAL_DEMO_DB_PATH}' is strictly forbidden. "
+            "Use an isolated disposable database by setting DATABASE_PATH."
+        )
+
     should_close = False
     if conn is None:
         conn = get_connection(db_path)
@@ -328,6 +344,12 @@ def seed_business_state(
 
     Returns the number of rows actually inserted (0 on subsequent calls).
     """
+    if is_canonical_demo_db(db_path):
+        raise PermissionError(
+            f"Direct seeding of canonical '{CANONICAL_DEMO_DB_PATH}' is strictly forbidden. "
+            "Use an isolated disposable database by setting DATABASE_PATH."
+        )
+
     path = Path(profiles_path) if profiles_path else _PROFILES_JSON
     if not path.exists():
         logger.warning("Profiles JSON not found at %s – skipping seed", path)

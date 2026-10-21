@@ -1,4 +1,4 @@
-﻿"""
+"""
 Encrypted Token Store for per-merchant OAuth refresh tokens.
 =============================================================
 Stores refresh tokens encrypted at rest using Fernet symmetric
@@ -23,6 +23,8 @@ import logging
 import os
 import sqlite3
 from typing import Optional
+
+from src.db.connection import DEFAULT_DB_PATH, is_canonical_demo_db
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +68,10 @@ class TokenStore:
 
     def __init__(
         self,
-        db_path: str = "data/demo.db",
+        db_path: Optional[str] = None,
         encryption_key: Optional[str] = None,
     ):
-        self.db_path = db_path
+        self.db_path = db_path or os.environ.get("DATABASE_PATH", DEFAULT_DB_PATH)
         self._key = encryption_key or os.environ.get("TOKEN_ENCRYPTION_KEY", "").strip()
         self._fernet = None
 
@@ -87,6 +89,13 @@ class TokenStore:
                 "Tokens will be base64-encoded only. Set the key for production use."
             )
 
+        env = os.environ.get("AUTOPILOT_ENV", "development").lower()
+        if env == "production" and not self._fernet:
+            raise RuntimeError(
+                "Insecure token storage fallback (base64) is strictly prohibited in production mode. "
+                "A valid TOKEN_ENCRYPTION_KEY must be configured."
+            )
+
         self._ensure_table()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -97,6 +106,11 @@ class TokenStore:
         return conn
 
     def _ensure_table(self) -> None:
+        if is_canonical_demo_db(self.db_path):
+            raise PermissionError(
+                "Direct mutation of canonical 'data/demo.db' is strictly forbidden. "
+                "Use an isolated disposable database."
+            )
         conn = self._get_conn()
         try:
             conn.executescript(_TOKEN_STORE_DDL)
@@ -111,6 +125,8 @@ class TokenStore:
     def _encrypt(self, plaintext: str) -> str:
         if self._fernet:
             return self._fernet.encrypt(plaintext.encode("utf-8")).decode("utf-8")
+        if os.environ.get("AUTOPILOT_ENV", "development").lower() == "production":
+            raise RuntimeError("Insecure base64 token storage is forbidden in production.")
         # Fallback: base64 with a marker so we know it's not encrypted
         return "b64:" + base64.b64encode(plaintext.encode("utf-8")).decode("utf-8")
 

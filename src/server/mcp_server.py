@@ -76,13 +76,6 @@ def create_mcp_server(
     places = places_adapter or GooglePlacesAdapter()
     zoho = zoho_adapter or ZohoBooksAdapter()
     adaptive_repo = profile_repo or AdaptiveProfileRepository(DEFAULT_DB_PATH)
-    orchestrator = AdaptiveBusinessOrchestrator(
-        repo=adaptive_repo,
-        approval_service=approvals,
-        places_adapter=places,
-        zoho_adapter=zoho,
-    )
-
     # Phase 4: Task lifecycle and controlled execution services
     _task_repo = task_repo or TaskRepository(db_path=DEFAULT_DB_PATH)
     _email_repo = email_repo or EmailRepository(db_path=DEFAULT_DB_PATH)
@@ -95,6 +88,18 @@ def create_mcp_server(
         email_repo=_email_repo,
         task_repo=_task_repo,
         profile_repo=adaptive_repo,
+        policy_engine=_policy_engine,
+    )
+
+    orchestrator = AdaptiveBusinessOrchestrator(
+        repo=adaptive_repo,
+        approval_service=approvals,
+        places_adapter=places,
+        zoho_adapter=zoho,
+        task_repo=_task_repo,
+        email_repo=_email_repo,
+        supervisor=_supervisor,
+        action_dispatcher=_dispatcher,
         policy_engine=_policy_engine,
     )
 
@@ -891,6 +896,46 @@ def create_mcp_server(
                 "classification": outcome.classification.to_dict() if hasattr(outcome.classification, "to_dict") else asdict(outcome.classification),
                 "proposals_count": len(outcome.action_proposals),
             }
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Tool 34: get_daily_operational_briefing (Voice-friendly Alexa+ briefing)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def get_daily_operational_briefing(
+        business_id: str,
+        actor_id: str = "owner",
+    ) -> Dict[str, Any]:
+        """
+        Generates a concise, voice-friendly daily operational briefing for the business owner.
+        Summarizes pending approvals, prioritized operational tasks, cash state, and suggested actions.
+        """
+        try:
+            return orchestrator.generate_daily_briefing(business_id=business_id, actor_id=actor_id)
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Tool 35: query_business_orchestrator (Natural Language Assistant)
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def query_business_orchestrator(
+        business_id: str,
+        message: str,
+        actor_id: str = "owner",
+    ) -> Dict[str, Any]:
+        """
+        Processes natural language instructions, follow-ups, and queries for the business.
+        Handles focus queries ('What should I focus on?'), multi-turn approval follow-ups
+        ('explain the first one', 'approve it'), and urgent task reviews.
+        """
+        try:
+            return orchestrator.handle_user_message(
+                business_id=business_id,
+                user_message=message,
+                actor_id=actor_id,
+            )
         except Exception as e:
             return {"status": "ERROR", "error": str(e)}
 

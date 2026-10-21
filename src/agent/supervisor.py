@@ -323,6 +323,9 @@ class EmailOperationalSupervisor:
             return "project_inquiry"
         if any(w in combined for w in ["invoice", "dispatch", "shipment", "raw material", "po #", "dispatch notice"]):
             return "supplier_request"
+        # Inbound supplier quotation/offer (distributor, wholesaler, or vendor offering prices to the business)
+        if any(w in combined for w in ["quotation for", "quotation from", "supplier quotation", "special diwali rate", "wholesale rate", "distributor quote", "vendor quote", "dealer price"]):
+            return "supplier_request"
         if any(w in combined for w in ["inquiry", "how much", "rate", "cost", "price", "catalog"]):
             return "customer_inquiry"
         return "general_operations"
@@ -424,11 +427,29 @@ class EmailOperationalSupervisor:
                 "total_revenue": retainer_fee,
             }
 
-        # 5. Supplier invoice or PO tracking
+        # 5. Supplier invoice, PO tracking, or supplier quotation
         if intent == "supplier_request":
+            # Extract monetary amount if quoted
+            amt_match = re.search(r"(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)", text)
+            quote_amount = 0.0
+            if amt_match:
+                try:
+                    quote_amount = float(amt_match.group(1).replace(",", ""))
+                except ValueError:
+                    quote_amount = 0.0
+
+            if quote_amount > 0:
+                summary = (
+                    f"Supplier quotation received from {email.sender.name or email.sender.email} "
+                    f"for Rs {quote_amount:,.2f}. Owner approval required before creating purchase order."
+                )
+            else:
+                summary = f"Supplier document update noted for {profile.display_name}. Verification required."
+
             return {
-                "summary": f"Supplier document update noted for {profile.display_name}. Verification required.",
-                "supplier_action": "verify_dispatch",
+                "summary": summary,
+                "supplier_action": "review_quotation" if quote_amount > 0 else "verify_dispatch",
+                "quoted_amount": quote_amount,
             }
 
         return {"summary": "General operations inquiry analyzed."}
@@ -538,17 +559,31 @@ class EmailOperationalSupervisor:
             )
 
         elif intent == "supplier_request":
+            quoted_amt = analysis.get("quoted_amount", 0.0)
+            if quoted_amt > 0:
+                desc = f"Create purchase order to {email.sender.name or email.sender.email} for Rs {quoted_amt:,.2f}"
+                payload = {
+                    "supplier_email": email.sender.email,
+                    "supplier_name": email.sender.name,
+                    "quotation_ref": email.normalized_subject,
+                    "order_amount": quoted_amt,
+                    "status": "AWAITING_OWNER_PO_CONFIRMATION",
+                }
+            else:
+                desc = "Create purchase order confirmation for supplier dispatch"
+                payload = {
+                    "supplier_email": email.sender.email,
+                    "document_ref": email.normalized_subject,
+                    "action": "acknowledge_receipt",
+                }
+
             proposals.append(
                 ActionProposal(
                     task_id=task_id,
                     business_id=profile.business_id,
                     action_type=ActionType.CREATE_PURCHASE_ORDER.value,
-                    description="Create purchase order confirmation for supplier dispatch",
-                    payload={
-                        "supplier_email": email.sender.email,
-                        "document_ref": email.normalized_subject,
-                        "action": "acknowledge_receipt",
-                    },
+                    description=desc,
+                    payload=payload,
                     requires_approval=True,
                 )
             )

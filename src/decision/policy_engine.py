@@ -80,11 +80,32 @@ class PermissionEngine:
         """Checks if the actor is registered as an authorized owner for the business."""
         if not actor_id or not business_id:
             return False
+        actor = actor_id.strip()
         allowed = self._authorized_owners.get(business_id)
-        if allowed is None:
-            # If no explicit list is configured, default owner format matches owner:* or admin:*
-            return actor_id.startswith("owner:") or actor_id.startswith("admin:")
-        return actor_id in allowed
+        if allowed is not None:
+            return actor in allowed
+
+        # In production mode without explicit configuration, fail closed
+        import os
+        env = os.environ.get("AUTOPILOT_ENV", "development").lower()
+        if env == "production":
+            return False
+
+        # Development / demo mode heuristic:
+        if actor in ("owner", "admin"):
+            return True
+
+        if actor.startswith("owner:") or actor.startswith("admin:"):
+            scoped_id = actor.split(":", 1)[1].strip()
+            # If the scoped id matches another known business_id, reject cross-tenant impersonation!
+            if scoped_id != business_id and scoped_id in self._authorized_owners:
+                return False
+            # Reject if the actor explicitly specifies a distinct tenant
+            if scoped_id != business_id and (scoped_id.startswith("biz_") or scoped_id.endswith("_01") or "_shop" in scoped_id):
+                return False
+            return True
+
+        return False
 
     def evaluate_action(
         self,

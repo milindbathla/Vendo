@@ -1,4 +1,4 @@
-﻿"""
+"""
 OAuth Callback & Connection Management Routes.
 ==============================================
 Standalone FastAPI APIRouter — mount in web_app.py with:
@@ -18,23 +18,63 @@ from __future__ import annotations
 
 import logging
 import os
+import json
+import logging
+import os
+import secrets
+import time
 import urllib.parse
 import urllib.request
-import json
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from src.db.token_store import TokenStore
+from src.db.connection import DEFAULT_DB_PATH
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["OAuth Connections"])
 
 # Shared token store instance (uses DATABASE_PATH or default)
-_DB_PATH = os.environ.get("DATABASE_PATH", "data/demo.db")
+_DB_PATH = os.environ.get("DATABASE_PATH", DEFAULT_DB_PATH)
 _token_store = TokenStore(db_path=_DB_PATH)
+
+# In-memory store for OAuth CSRF state tokens with expiration (15 minutes)
+_OAUTH_STATES: Dict[str, Dict[str, Any]] = {}
+_STATE_TTL_SECONDS = 900
+
+
+def _create_oauth_state(provider: str, merchant_id: str) -> str:
+    """Generates a cryptographically secure, unguessable state token for CSRF protection."""
+    state_token = secrets.token_urlsafe(32)
+    _OAUTH_STATES[state_token] = {
+        "provider": provider,
+        "merchant_id": merchant_id,
+        "created_at": time.time(),
+    }
+    return state_token
+
+
+def _verify_and_consume_oauth_state(state_token: str, provider: str) -> Optional[str]:
+    """Verifies that the CSRF state token is valid, unexpired, and single-use."""
+    now = time.time()
+    # Prune expired states
+    expired = [k for k, v in _OAUTH_STATES.items() if now - v.get("created_at", 0) > _STATE_TTL_SECONDS]
+    for k in expired:
+        _OAUTH_STATES.pop(k, None)
+
+    entry = _OAUTH_STATES.get(state_token)
+    if not entry:
+        return None
+    if entry.get("provider") != provider:
+        return None
+    if now - entry.get("created_at", 0) > _STATE_TTL_SECONDS:
+        _OAUTH_STATES.pop(state_token, None)
+        return None
+    _OAUTH_STATES.pop(state_token, None)
+    return entry.get("merchant_id")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -65,8 +105,8 @@ class DisconnectResponse(BaseModel):
 # Provider configuration helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _zoho_login_url(merchant_id: str) -> str:
-    """Builds the Zoho OAuth authorisation URL for a merchant."""
+def _zoho_login_url(merchant_id: str, state_token: str) -> str:
+    """Builds the Zoho OAuth authorisation URL with cryptographic CSRF state token."""
     client_id     = os.environ.get("ZOHO_CLIENT_ID", "YOUR_ZOHO_CLIENT_ID")
     accounts_url  = os.environ.get("ZOHO_ACCOUNTS_URL", "https://accounts.zoho.in")
     redirect_uri  = os.environ.get("ZOHO_REDIRECT_URI", "http://localhost:8000/auth/zoho_books/callback")
@@ -78,7 +118,7 @@ def _zoho_login_url(merchant_id: str) -> str:
         "scope":         scope,
         "redirect_uri":  redirect_uri,
         "access_type":   "offline",
-        "state":         merchant_id,   # round-tripped to identify the merchant on callback
+        "state":         state_token,   # Cryptographic CSRF state token
     })
     return f"{accounts_url}/oauth/v2/auth?{params}"
 
@@ -90,8 +130,11 @@ def _zoho_exchange_code(code: str) -> Dict[str, Any]:
     redirect_uri  = os.environ.get("ZOHO_REDIRECT_URI", "http://localhost:8000/auth/zoho_books/callback")
     accounts_url  = os.environ.get("ZOHO_ACCOUNTS_URL", "https://accounts.zoho.in")
 
-    if not (client_id and client_secret):
-        raise HTTPException(status_code=500, detail="Zoho OAuth credentials not configured on server.")
+    if not (client_id and client_secret) or client_id == "YOUR_ZOHO_CLIENT_ID":
+        raise HTTPException(
+            status_code=503,
+            detail="Zoho OAuth credentials not configured on server. Live OAuth token exchange is disabled.",
+        )
 
     token_url = f"{accounts_url}/oauth/v2/token"
     payload = urllib.parse.urlencode({
@@ -130,7 +173,8 @@ def get_login_url(
     The front-end / Alexa companion app opens this URL in a browser.
     """
     if provider == "zoho_books":
-        redirect_url = _zoho_login_url(merchant_id)
+        state_token = _create_oauth_state(provider, merchant_id)
+        redirect_url = _zoho_login_url(merchant_id, state_token)
         return LoginRedirectResponse(
             provider=provider,
             redirect_url=redirect_url,
@@ -164,20 +208,32 @@ def get_login_url(
 def oauth_callback(
     provider: str,
     code: str = Query(..., description="Authorization code from provider"),
-    state: str = Query(default="default", description="Merchant ID round-tripped from login"),
+    state: str = Query(..., description="Cryptographic CSRF state token"),
     error: Optional[str] = Query(default=None),
 ) -> Dict[str, Any]:
     """
     OAuth callback endpoint — provider redirects here after merchant approval.
     Exchanges the authorization code for a refresh_token and stores it encrypted.
-
-    The 'state' parameter carries the merchant_id set during /login.
+    Validates cryptographic single-use CSRF state parameter.
     """
-    merchant_id = state or "default"
-
     if error:
-        logger.warning("OAuth callback error for provider=%s merchant=%s: %s", provider, merchant_id, error)
+        logger.warning("OAuth callback error for provider=%s: %s", provider, error)
         raise HTTPException(status_code=400, detail=f"OAuth error from provider: {error}")
+
+    merchant_id = _verify_and_consume_oauth_state(state, provider)
+    if not merchant_id:
+        env = os.environ.get("AUTOPILOT_ENV", "development").lower()
+        if env == "production":
+            raise HTTPException(
+                status_code=403,
+                detail="Invalid, expired, or replayed OAuth CSRF state parameter. Authorization aborted.",
+            )
+        # Development fallback (warn and allow if state is non-empty)
+        if state and state != "default":
+            merchant_id = state
+            logger.warning("OAuth callback: Accepting unverified state '%s' in development mode only.", state)
+        else:
+            merchant_id = "default"
 
     if provider == "zoho_books":
         token_data = _zoho_exchange_code(code)

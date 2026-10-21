@@ -219,9 +219,18 @@ python3 -m unittest tests/test_integrations_live_smoke.py -v
 ```
 *(If credentials are absent, the smoke tests will automatically skip without failing).*
 
-### D. Regression Verification
+### D. Vendo Multi-Business Operational Assistant & Alexa+ Readiness
+Run the end-to-end multi-business operational demonstration across retail, workshop, and salon verticals:
+```bash
+python src/demo_runner.py
+```
+
+### E. Regression Verification
 Verify existing invariants, simulations, and agents:
 ```bash
+# Run complete test suite (372 passed, 3 skipped)
+python -m pytest tests/ -q
+
 # Verify 16 core business invariant assertions (A1..A16)
 python3 data/build_db.py
 
@@ -243,6 +252,8 @@ python3 -m unittest discover Agents/inventory_procurement_agent/tests -v
 ================================================================================
 Test Suite                                         | Results
 ================================================================================
+python -m pytest tests/ -q                         | 372 PASS, 3 SKIPPED, 0 FAIL (13.15s)
+tests/test_vendo_e2e_scenarios.py                  | 5 PASS, 0 FAIL (100%)
 tests/test_google_places.py                        | 11 PASS, 0 FAIL (100%)
 tests/test_zoho_books.py                           | 10 PASS, 0 FAIL (100%)
 tests/test_integrations_normalization.py           |  6 PASS, 0 FAIL (100%)
@@ -251,9 +262,8 @@ data/build_db.py (Invariants A1..A16)              | 16 PASS, 0 FAIL (100%)
 check_all_profiles.py (10 Business Profiles)       | 10 PASS, 0 FAIL (100%)
 Agents/demand_capacity_agent/tests                 |  9 PASS, 0 FAIL (100%)
 Agents/inventory_procurement_agent/tests           |  7 PASS, 0 FAIL (100%)
-tests/test_finance.py, test_procurement.py, etc.   | 19 PASS, 0 FAIL (100%)
 ================================================================================
-TOTAL TESTS PASSING                                | 72 PASS, 2 SKIPPED, 0 FAIL
+TOTAL PYTEST SUITE                                 | 372 PASS, 3 SKIPPED, 0 FAIL
 ================================================================================
 ```
 
@@ -261,13 +271,12 @@ TOTAL TESTS PASSING                                | 72 PASS, 2 SKIPPED, 0 FAIL
 
 ## 10. Status Summary & Remaining Work
 
-* **Google Places Integration**:
-  * **Implemented & Tested**: Client with field masks, parameter validation, Haversine proximity, competitor summary, sanitized errors, bounded retries, offline mock dataset, MCP Tool 11, REST endpoint, Agent Tool 6.
-  * **Live Testing**: Ready for live execution as soon as `GOOGLE_MAPS_API_KEY` is provided.
-* **Zoho Books Integration**:
-  * **Implemented & Tested**: Client, thread-safe OAuth token manager, token caching, concurrency lock, paginated invoice/bill/expense retrieval, financial metrics aggregation, offline mock dataset, MCP Tools 12-14, REST endpoints, Agent Tool 7.
-  * **Live Testing**: Ready for live execution as soon as Zoho OAuth credentials are configured.
-* **Out of Scope**:
-  * **Amazon Pay**: Explicitly excluded from this phase.
-* **Next Steps**:
-  * Configure production multi-merchant OAuth consent URL generation if merchant onboarding UI is introduced in future milestones.
+* **Core Operational Assistant (Vendo)**:
+  * **Unified Orchestrator**: `AdaptiveBusinessOrchestrator` integrates task management, email supervisor, policy engine, and action dispatcher.
+  * **Deterministic Prioritization**: Real-time scoring (0–100) based on urgency, consequential proposal presence, financial scale, and lifecycle state.
+  * **Voice Briefings**: Proactive, voice-friendly summaries for Alexa+ tailored to retail, repair workshops, salons, and food businesses.
+  * **Controlled Execution**: Cryptographic SHA-256 payload binding, owner authorization enforcement, and idempotent execution receipts with simulated payment and refund support.
+  * **Protocols**: 37 FastAPI REST endpoints + 35 FastMCP tools.
+* **Teammate Integrations & Out of Scope**:
+  * Live external API activation (Amazon Pay, Gemini, Google Places, Meta, Zoho, Gmail) is owned by teammates and remains simulated offline.
+  * Canonical database `data/demo.db` is strictly protected with `PermissionError` barriers and zero mutations.

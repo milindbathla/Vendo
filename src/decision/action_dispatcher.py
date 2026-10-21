@@ -354,6 +354,96 @@ class SimulatedInternalDraftHandler(BaseActionHandler):
         }
 
 
+class SimulatedPaymentHandler(BaseActionHandler):
+    """Simulated payment execution adapter (offline, safe simulation)."""
+
+    @property
+    def action_type(self) -> str:
+        return ActionType.EXECUTE_PAYMENT.value
+
+    @property
+    def provider_name(self) -> str:
+        return "simulated_amazon_pay_provider"
+
+    def execute(
+        self,
+        payload: Dict[str, Any],
+        business_id: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        amount = payload.get("amount", 0.0)
+        currency = payload.get("currency", "INR")
+        payee = payload.get("payee") or payload.get("supplier_email") or payload.get("recipient") or ""
+        reference_id = payload.get("reference_id") or payload.get("charge_permission_id") or f"PERM-{uuid.uuid4().hex[:8].upper()}"
+
+        if payload.get("simulate_uncertainty") or "uncertain@" in str(payee):
+            raise ExecutionUncertainError(
+                f"Simulated payment gateway timeout charging {currency} {amount} for '{payee}'."
+            )
+        if payload.get("simulate_failure") or "fail@" in str(payee) or float(amount) < 0:
+            raise ExecutionFailedError(
+                f"Simulated payment decline: Insufficient balance or invalid payment state for '{payee}'."
+            )
+
+        charge_id = f"MOCK-CHG-{uuid.uuid4().hex[:8].upper()}"
+        sim_receipt_id = f"pay_sim_{uuid.uuid4().hex[:12]}"
+        return {
+            "receipt_id": sim_receipt_id,
+            "charge_id": charge_id,
+            "amount": float(amount),
+            "currency": currency,
+            "payee": payee,
+            "reference_id": reference_id,
+            "status": "CAPTURED_SIMULATED",
+            "is_mock": True,
+        }
+
+
+class SimulatedRefundHandler(BaseActionHandler):
+    """Simulated refund issuance adapter (offline, safe simulation)."""
+
+    @property
+    def action_type(self) -> str:
+        return ActionType.ISSUE_REFUND.value
+
+    @property
+    def provider_name(self) -> str:
+        return "simulated_amazon_pay_refund_provider"
+
+    def execute(
+        self,
+        payload: Dict[str, Any],
+        business_id: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        amount = payload.get("amount", 0.0)
+        currency = payload.get("currency", "INR")
+        customer = payload.get("customer") or payload.get("customer_email") or payload.get("recipient") or ""
+        charge_id = payload.get("charge_id", f"MOCK-CHG-{uuid.uuid4().hex[:8].upper()}")
+
+        if payload.get("simulate_uncertainty") or "uncertain@" in str(customer):
+            raise ExecutionUncertainError(
+                f"Simulated refund gateway timeout processing refund of {currency} {amount} for '{customer}'."
+            )
+        if payload.get("simulate_failure") or "fail@" in str(customer) or float(amount) < 0:
+            raise ExecutionFailedError(
+                f"Simulated refund failure: Original charge '{charge_id}' cannot be refunded."
+            )
+
+        refund_id = f"MOCK-REF-{uuid.uuid4().hex[:8].upper()}"
+        sim_receipt_id = f"ref_sim_{uuid.uuid4().hex[:12]}"
+        return {
+            "receipt_id": sim_receipt_id,
+            "refund_id": refund_id,
+            "charge_id": charge_id,
+            "amount": float(amount),
+            "currency": currency,
+            "customer": customer,
+            "status": "REFUNDED_SIMULATED",
+            "is_mock": True,
+        }
+
+
 # ---------------------------------------------------------------------------
 # Centralized Action Dispatcher
 # ---------------------------------------------------------------------------
@@ -390,6 +480,8 @@ class ActionDispatcher:
         self.register_handler(SimulatedAppointmentHandler())
         self.register_handler(SimulatedPurchaseOrderHandler())
         self.register_handler(SimulatedInternalDraftHandler())
+        self.register_handler(SimulatedPaymentHandler())
+        self.register_handler(SimulatedRefundHandler())
 
         if handlers:
             for h in handlers.values():
@@ -526,7 +618,7 @@ class ActionDispatcher:
         )
 
         # Move task to EXECUTING via legal transition path
-        if task.state != TaskState.EXECUTING:
+        if task.state not in (TaskState.EXECUTING, TaskState.COMPLETED, TaskState.CANCELLED, TaskState.REJECTED):
             if task.state == TaskState.RECEIVED:
                 task = self.task_repo.transition_state(
                     task_id=task.task_id,
@@ -559,7 +651,6 @@ class ActionDispatcher:
                 details={"reason": "Action execution initiated by dispatcher"},
             )
 
-
         # 10. Execute through handler with failure and uncertainty handling
         try:
             output_data = handler.execute(
@@ -588,14 +679,16 @@ class ActionDispatcher:
             finally:
                 self.task_repo._close(conn)
 
-            # Complete task
-            self.task_repo.transition_state(
-                task_id=task.task_id,
-                business_id=business_id,
-                target_state=TaskState.COMPLETED,
-                actor=actor_id,
-                details={"reason": f"Action '{action_id}' executed successfully with receipt '{receipt_id}'"},
-            )
+            # Complete task if not already completed
+            fresh_task = self.task_repo.get_task(task.task_id, business_id=business_id)
+            if fresh_task and fresh_task.state != TaskState.COMPLETED:
+                self.task_repo.transition_state(
+                    task_id=task.task_id,
+                    business_id=business_id,
+                    target_state=TaskState.COMPLETED,
+                    actor=actor_id,
+                    details={"reason": f"Action '{action_id}' executed successfully with receipt '{receipt_id}'"},
+                )
 
             # Log audit entry
             conn = self.task_repo._conn()
