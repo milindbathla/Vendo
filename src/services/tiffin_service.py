@@ -761,6 +761,27 @@ class TiffinOrderService:
             "usable_cash_remaining": round(usable_cash - procurement_cost, 2),
         }
 
+    def evaluate_opportunity(
+        self,
+        date: str,
+        additional_meals: int,
+        business_id: str = "home_tiffin",
+        current_cash: float = 8000.0,
+        min_cash_buffer: float = 2000.0,
+        upcoming_obligations: float = 0.0,
+        principal: Optional[TrustedPrincipal] = None,
+    ) -> Dict[str, Any]:
+        """Convenience alias for evaluate_order_opportunity accepting date first."""
+        return self.evaluate_order_opportunity(
+            additional_meals=additional_meals,
+            date=date,
+            business_id=business_id,
+            current_cash=current_cash,
+            min_cash_buffer=min_cash_buffer,
+            upcoming_obligations=upcoming_obligations,
+            principal=principal,
+        )
+
     # -------------------------------------------------------------------------
     # Two-Phase Action Approval & Idempotent Execution
     # -------------------------------------------------------------------------

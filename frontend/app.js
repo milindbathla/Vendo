@@ -21,9 +21,11 @@ const SUGGESTS = [
 (async function init() {
   renderSuggests();
   try {
-    const b = await fetch('/api/panel/business').then(r => r.json());
-    $('#bizName').textContent = b.business_name || 'Your shop';
-    $('#bizMeta').textContent = [b.locality, b.city].filter(Boolean).join(', ');
+    const bizId = localStorage.getItem('vendo_active_business_id');
+    const url = bizId ? `/api/panel/business?business_id=${encodeURIComponent(bizId)}` : '/api/panel/business';
+    const b = await fetch(url).then(r => r.json());
+    $('#bizName').textContent = b.business_name || b.name || 'Your shop';
+    $('#bizMeta').textContent = [b.locality, b.city, b.state].filter(Boolean).join(', ');
     const pill = $('#modePill');
     pill.textContent = '· online';
     pill.title = 'Alexa+ is connected to your business';
@@ -91,9 +93,10 @@ async function send(text) {
   pulseMic();
   const typing = addTyping();
   try {
+    const bizId = localStorage.getItem('vendo_active_business_id');
     const res = await fetch('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text })
+      body: JSON.stringify({ message: text, business_id: bizId || undefined })
     }).then(r => r.json());
     typing.remove();
     const meta = { source: res.source, mcp: res.mcp || {} };

@@ -45,6 +45,7 @@ from src.decision.policy_engine import PermissionEngine
 from src.decision.action_dispatcher import ActionDispatcher, ExecutionReceipt
 from src.agent.supervisor import EmailOperationalSupervisor
 from src.models.email import InboundEmail, EmailAddress
+from src.services.tiffin_service import TiffinOrderService
 
 
 import os
@@ -64,6 +65,7 @@ def create_mcp_server(
     action_dispatcher: Optional[ActionDispatcher] = None,
     supervisor: Optional[EmailOperationalSupervisor] = None,
     session_repo: Optional[SessionRepository] = None,
+    tiffin_service: Optional[Any] = None,
 ) -> FastMCP:
     """Factory to create and configure the Alexa Business Autopilot MCP Server."""
 
@@ -97,6 +99,11 @@ def create_mcp_server(
         policy_engine=_policy_engine,
     )
     _session_repo = session_repo or SessionRepository(db_path=DEFAULT_DB_PATH)
+    _tiffin_service = tiffin_service or TiffinOrderService(
+        db_path=DEFAULT_DB_PATH,
+        recipe_manager=recipe_manager,
+        supplier_simulator=supplier_simulator,
+    )
 
     orchestrator = AdaptiveBusinessOrchestrator(
         repo=adaptive_repo,
@@ -109,6 +116,7 @@ def create_mcp_server(
         action_dispatcher=_dispatcher,
         policy_engine=_policy_engine,
         session_repo=_session_repo,
+        tiffin_service=_tiffin_service,
     )
 
     def _authorize_mcp_call(
@@ -1027,6 +1035,116 @@ def create_mcp_server(
                 user_message=message,
                 actor_id=effective_actor,
                 session_id=eff_session,
+            )
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Tool 36: tiffin_get_orders
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def tiffin_get_orders(
+        date: str,
+        business_id: str = "home_tiffin",
+        actor_id: str = "owner",
+    ) -> Dict[str, Any]:
+        """
+        Retrieves all customer tiffin orders for a specific date, along with units and status.
+        """
+        effective_actor, err = _authorize_mcp_call(
+            business_id=business_id, supplied_actor_id=actor_id, required_scope="business:read"
+        )
+        if err:
+            return err
+        try:
+            orders = _tiffin_service.list_orders_for_date(date=date, business_id=business_id)
+            return {
+                "business_id": business_id,
+                "date": date,
+                "count": len(orders),
+                "orders": [
+                    {
+                        "order_id": o.order_id,
+                        "customer_id": o.customer_id,
+                        "units": o.units,
+                        "status": o.status.value if hasattr(o.status, "value") else str(o.status),
+                        "amount": o.amount,
+                    }
+                    for o in orders
+                ],
+            }
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Tool 37: tiffin_get_capacity
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def tiffin_get_capacity(
+        date: str,
+        business_id: str = "home_tiffin",
+        actor_id: str = "owner",
+    ) -> Dict[str, Any]:
+        """
+        Checks kitchen meal capacity, current bookings, and remaining slots for a target date.
+        """
+        effective_actor, err = _authorize_mcp_call(
+            business_id=business_id, supplied_actor_id=actor_id, required_scope="business:read"
+        )
+        if err:
+            return err
+        try:
+            return _tiffin_service.get_capacity_status(date=date, business_id=business_id)
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Tool 38: tiffin_get_inventory
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def tiffin_get_inventory(
+        business_id: str = "home_tiffin",
+        actor_id: str = "owner",
+    ) -> Dict[str, Any]:
+        """
+        Checks current ingredient stocks, reserved quantities for confirmed orders, and available stock.
+        """
+        effective_actor, err = _authorize_mcp_call(
+            business_id=business_id, supplied_actor_id=actor_id, required_scope="business:read"
+        )
+        if err:
+            return err
+        try:
+            return _tiffin_service.get_inventory_status(business_id=business_id)
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # -------------------------------------------------------------------------
+    # Tool 39: tiffin_evaluate_opportunity
+    # -------------------------------------------------------------------------
+    @server.tool()
+    def tiffin_evaluate_opportunity(
+        date: str,
+        additional_meals: int,
+        current_cash: float = 8000.0,
+        business_id: str = "home_tiffin",
+        actor_id: str = "owner",
+    ) -> Dict[str, Any]:
+        """
+        Evaluates taking on additional meal orders for a date, evaluating capacity,
+        ingredient shortages against recipe BOM, and required procurement costs while maintaining liquidity.
+        """
+        effective_actor, err = _authorize_mcp_call(
+            business_id=business_id, supplied_actor_id=actor_id, required_scope="business:read"
+        )
+        if err:
+            return err
+        try:
+            return _tiffin_service.evaluate_opportunity(
+                date=date,
+                additional_meals=additional_meals,
+                current_cash=current_cash,
+                business_id=business_id,
             )
         except Exception as e:
             return {"status": "ERROR", "error": str(e)}

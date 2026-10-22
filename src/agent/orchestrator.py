@@ -68,6 +68,7 @@ class AdaptiveBusinessOrchestrator:
         action_dispatcher: Optional[ActionDispatcher] = None,
         policy_engine: Optional[PermissionEngine] = None,
         session_repo: Optional[SessionRepository] = None,
+        tiffin_service: Optional[Any] = None,
     ):
         self.repo = repo
         self.approvals = approval_service or PurchaseApprovalService()
@@ -79,6 +80,7 @@ class AdaptiveBusinessOrchestrator:
         self.action_dispatcher = action_dispatcher
         self.policy_engine = policy_engine or PermissionEngine()
         self.session_repo = session_repo
+        self.tiffin_service = tiffin_service
         self._last_referenced_actions: Dict[str, List[ActionProposal]] = {}
 
     def _get_active_proposals_for_context(

@@ -24,10 +24,13 @@ from dataclasses import asdict
 import json
 import os
 from typing import Dict, Any, List, Optional
+import re
+import time
 
 from contextlib import asynccontextmanager
 import urllib.parse
 from fastapi import FastAPI, HTTPException, Header, Depends, Query, Request, Form
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, model_validator
 
@@ -36,7 +39,20 @@ from src.db.state_repository import BusinessStateRepository
 from src.db.profile_repository import AdaptiveProfileRepository
 from src.db.session_repository import SessionRepository
 from src.agent.orchestrator import AdaptiveBusinessOrchestrator
-from src.models.adaptive_profile import FactStatus, FactSource
+from src.models.adaptive_profile import (
+    AdaptiveBusinessProfile,
+    BusinessFact,
+    FactStatus,
+    FactSource,
+)
+from src.services.tiffin_service import (
+    TiffinOrderService,
+    OrderStatus,
+    OrderType,
+    CapacityExceededError,
+    InsufficientStockError,
+    InsufficientCashError,
+)
 from src.server.mcp_server import create_mcp_server
 from src.server.mcp_auth import MCPAuthenticationMiddleware
 from src.security.auth_service import (
@@ -120,6 +136,11 @@ state_repo          = BusinessStateRepository(_DB_PATH)
 places_adapter      = GooglePlacesAdapter()
 zoho_adapter        = ZohoBooksAdapter()
 adaptive_repo       = AdaptiveProfileRepository(_DB_PATH)
+tiffin_service      = TiffinOrderService(
+    db_path=_DB_PATH,
+    recipe_manager=recipe_manager,
+    supplier_simulator=supplier_simulator,
+)
 
 # Phase 4 & Sessions services
 task_repo           = TaskRepository(_DB_PATH)
@@ -146,6 +167,7 @@ orchestrator        = AdaptiveBusinessOrchestrator(
     action_dispatcher=action_dispatcher,
     policy_engine=policy_engine,
     session_repo=session_repo,
+    tiffin_service=tiffin_service,
 )
 amazon_pay_adapter = AmazonPayAdapter()
 meta_adapter       = MetaAdapter()
@@ -163,6 +185,7 @@ mcp_server = create_mcp_server(
     action_dispatcher=action_dispatcher,
     supervisor=supervisor,
     session_repo=session_repo,
+    tiffin_service=tiffin_service,
 )
 
 mcp_app = mcp_server.streamable_http_app()
@@ -180,6 +203,15 @@ app = FastAPI(
     description="Voice-first operating layer & MCP server for Indian small businesses",
     version="1.0.0",
     lifespan=app_lifespan,
+)
+
+# Configure CORS for local development and cross-origin frontend interactions
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Mount authenticated MCP endpoints (Streamable HTTP & SSE)
@@ -204,6 +236,22 @@ _FRONTEND_DIR = _Path(__file__).resolve().parents[2] / "frontend"
 if _FRONTEND_DIR.is_dir():
     # Served at /app/ (onboarding) and /app/alexa.html (Alexa+ simulator)
     app.mount("/app", StaticFiles(directory=str(_FRONTEND_DIR), html=True), name="frontend")
+
+
+@app.get("/")
+def root_endpoint(request: Request):
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept and "application/json" not in accept:
+        return RedirectResponse(url="/app/", status_code=302)
+    return {
+        "service": "Alexa Business Autopilot Backend",
+        "mode": "backend_only",
+        "mcp_enabled": True,
+        "mcp_endpoints": ["/mcp", "/sse"],
+        "app_url": "/app/",
+        "version": "1.0.0",
+        "simulation_notice": SIMULATION_NOTICE,
+    }
 
 
 # -----------------------------------------------------------------------------
@@ -245,6 +293,354 @@ def health():
         "db_path": _DB_PATH,
         "simulation_notice": SIMULATION_NOTICE,
     }
+
+
+# -----------------------------------------------------------------------------
+# Onboarding & Business Profile Request & Response Models & Endpoints
+# -----------------------------------------------------------------------------
+class OnboardingSetupRequest(BaseModel):
+    business_name: str
+    owner_name: str
+    archetype: str
+    phone: Optional[str] = None
+    gstin: Optional[str] = None
+    locality: Optional[str] = None
+    city: Optional[str] = None
+    min_cash_buffer: Optional[float] = 5000.0
+    max_per_day: Optional[float] = 40.0
+    order_cutoff: Optional[str] = None
+    cooking_start: Optional[str] = None
+    open_time: Optional[str] = None
+    close_time: Optional[str] = None
+    weekly_day_off: Optional[str] = None
+    delivery_radius_km: Optional[float] = None
+    fast_delivery_fee: Optional[float] = None
+    supplier_credit_days: Optional[str] = None
+    busiest_time: Optional[str] = None
+    language: Optional[str] = None
+    connected_services: Optional[List[str]] = None
+    business_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_inputs(self):
+        if not self.business_name or not self.business_name.strip():
+            raise ValueError("Business name cannot be empty.")
+        if not self.owner_name or not self.owner_name.strip():
+            raise ValueError("Owner name cannot be empty.")
+        if not self.archetype or not self.archetype.strip():
+            raise ValueError("Type of business must be selected.")
+        if self.min_cash_buffer is not None and self.min_cash_buffer < 0:
+            raise ValueError("Minimum cash buffer cannot be negative.")
+        if self.max_per_day is not None and self.max_per_day <= 0:
+            raise ValueError("Maximum output per day must be strictly positive.")
+        if self.delivery_radius_km is not None and self.delivery_radius_km < 0:
+            raise ValueError("Delivery radius cannot be negative.")
+        return self
+
+
+class TiffinOrderCreateRequest(BaseModel):
+    order_id: str
+    customer_id: str
+    date: str
+    units: int
+    unit_price: float = 80.0
+    order_type: str = "one_off"
+    business_id: str = "home_tiffin"
+
+    @model_validator(mode="after")
+    def validate_order(self):
+        if not self.order_id or not self.order_id.strip():
+            raise ValueError("Order ID cannot be empty.")
+        if not self.customer_id or not self.customer_id.strip():
+            raise ValueError("Customer ID cannot be empty.")
+        if not self.date or not self.date.strip():
+            raise ValueError("Date cannot be empty.")
+        if self.units <= 0:
+            raise ValueError("Units must be strictly positive.")
+        return self
+
+
+class TiffinEvaluateRequest(BaseModel):
+    date: str
+    additional_meals: int
+    current_cash: float = 8000.0
+    min_cash_buffer: float = 2000.0
+    upcoming_obligations: float = 0.0
+    business_id: str = "home_tiffin"
+
+    @model_validator(mode="after")
+    def validate_eval(self):
+        if not self.date or not self.date.strip():
+            raise ValueError("Date cannot be empty.")
+        if self.additional_meals <= 0:
+            raise ValueError("Additional meals must be strictly positive.")
+        return self
+
+
+ARCHETYPE_CATEGORY_MAP = {
+    "tiffin / cloud kitchen": "home_tiffin",
+    "tiffin": "home_tiffin",
+    "cloud kitchen": "home_tiffin",
+    "kirana / general store": "retail_kirana",
+    "kirana": "retail_kirana",
+    "bakery": "home_bakery",
+    "salon / services": "salon_service",
+    "salon": "salon_service",
+    "tailoring / boutique": "tailoring_boutique",
+    "tailoring": "tailoring_boutique",
+    "light manufacturing": "small_fabrication",
+    "reseller / distribution": "clothing_retail",
+}
+
+
+def _process_onboarding_setup(req: OnboardingSetupRequest):
+    arch_key = req.archetype.strip().lower()
+    category = ARCHETYPE_CATEGORY_MAP.get(arch_key, "custom_enterprise")
+
+    biz_id = req.business_id
+    if not biz_id:
+        clean_name = re.sub(r"[^a-zA-Z0-9]+", "_", req.business_name.strip().lower()).strip("_")
+        if category == "home_tiffin" and ("rasoi" in clean_name or "tiffin" in clean_name or "demo" in clean_name):
+            biz_id = "home_tiffin"
+        else:
+            biz_id = clean_name or f"biz_{int(time.time())}"
+
+    facts = {
+        "owner_name": BusinessFact("owner_name", req.owner_name.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0),
+        "min_cash_buffer": BusinessFact("min_cash_buffer", float(req.min_cash_buffer if req.min_cash_buffer is not None else 2000.0), "number", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0),
+        "daily_capacity": BusinessFact("daily_capacity", float(req.max_per_day if req.max_per_day is not None else 40.0), "number", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0),
+        "archetype_raw": BusinessFact("archetype_raw", req.archetype, "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0),
+    }
+    if req.phone:
+        facts["phone"] = BusinessFact("phone", req.phone.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.gstin:
+        facts["gstin"] = BusinessFact("gstin", req.gstin.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.locality:
+        facts["locality"] = BusinessFact("locality", req.locality.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.order_cutoff:
+        facts["order_cutoff"] = BusinessFact("order_cutoff", req.order_cutoff.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.cooking_start:
+        facts["cooking_start"] = BusinessFact("cooking_start", req.cooking_start.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.open_time:
+        facts["open_time"] = BusinessFact("open_time", req.open_time.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.close_time:
+        facts["close_time"] = BusinessFact("close_time", req.close_time.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.weekly_day_off:
+        facts["weekly_day_off"] = BusinessFact("weekly_day_off", req.weekly_day_off.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.delivery_radius_km is not None:
+        facts["delivery_radius_km"] = BusinessFact("delivery_radius_km", float(req.delivery_radius_km), "number", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.fast_delivery_fee is not None:
+        facts["fast_delivery_fee"] = BusinessFact("fast_delivery_fee", float(req.fast_delivery_fee), "number", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.supplier_credit_days:
+        facts["supplier_credit_days"] = BusinessFact("supplier_credit_days", str(req.supplier_credit_days).strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.busiest_time:
+        facts["busiest_time"] = BusinessFact("busiest_time", req.busiest_time.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.language:
+        facts["language"] = BusinessFact("language", req.language.strip(), "string", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+    if req.connected_services:
+        facts["connected_services"] = BusinessFact("connected_services", req.connected_services, "array", FactStatus.CONFIRMED, FactSource.USER_STATED, 1.0)
+
+    profile = AdaptiveBusinessProfile(
+        business_id=biz_id,
+        display_name=req.business_name.strip(),
+        category=category,
+        description=f"{req.archetype} operated by {req.owner_name.strip()} in {req.locality or req.city or 'India'}",
+        city=req.city.strip() if req.city else "Bengaluru",
+        state="Karnataka",
+        currency="INR",
+        onboarding_completed=True,
+        facts=facts,
+    )
+
+    adaptive_repo.save_profile(profile)
+
+    try:
+        policy_engine.grant_role(biz_id, req.owner_name.strip(), "owner")
+    except Exception:
+        pass
+
+    if category == "home_tiffin":
+        try:
+            today_str = time.strftime("%Y-%m-%d")
+            tiffin_service.set_daily_capacity(today_str, int(req.max_per_day or 40), business_id=biz_id)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "business_id": biz_id,
+        "display_name": profile.display_name,
+        "category": profile.category,
+        "onboarding_completed": True,
+        "message": f"Business '{profile.display_name}' onboarded successfully.",
+        "profile": {
+            "business_id": biz_id,
+            "display_name": profile.display_name,
+            "category": profile.category,
+            "city": profile.city,
+            "state": profile.state,
+            "owner_name": req.owner_name.strip(),
+            "facts": {k: f.value for k, f in facts.items()},
+        },
+    }
+
+
+@app.post("/api/onboarding/setup")
+def onboarding_setup(req: OnboardingSetupRequest):
+    return _process_onboarding_setup(req)
+
+
+@app.post("/api/business/profile")
+def create_business_profile_alias(req: OnboardingSetupRequest):
+    return _process_onboarding_setup(req)
+
+
+@app.get("/api/onboarding/profile")
+def get_onboarding_profile(business_id: Optional[str] = Query(None)):
+    target_id = business_id or "home_tiffin"
+    prof = adaptive_repo.get_profile(target_id)
+    if prof:
+        return {
+            "business_id": prof.business_id,
+            "display_name": prof.display_name,
+            "category": prof.category,
+            "description": prof.description,
+            "city": prof.city,
+            "state": prof.state,
+            "onboarding_completed": prof.onboarding_completed,
+            "facts": {k: f.value for k, f in prof.facts.items()},
+        }
+    b = business_profiles.get(target_id)
+    if b:
+        return {
+            "business_id": b.business_type,
+            "display_name": b.business_type.replace("_", " ").title(),
+            "category": b.business_type,
+            "description": f"Demo profile for {b.business_type}",
+            "city": "Bengaluru",
+            "state": "Karnataka",
+            "onboarding_completed": True,
+            "facts": {
+                "min_cash_buffer": b.safety_reserve,
+                "daily_capacity": b.daily_capacity,
+                "current_cash": b.total_cash,
+                "current_inventory": b.current_inventory,
+            },
+        }
+    raise HTTPException(status_code=404, detail=f"Business profile '{target_id}' not found.")
+
+
+# -----------------------------------------------------------------------------
+# Tiffin Service REST Endpoints
+# -----------------------------------------------------------------------------
+@app.get("/api/tiffin/orders")
+def get_tiffin_orders(
+    date: Optional[str] = Query(None),
+    business_id: str = Query("home_tiffin"),
+):
+    try:
+        if date:
+            orders = tiffin_service.list_orders_for_date(date=date, business_id=business_id)
+        else:
+            orders = [o for o in tiffin_service._orders.values() if o.business_id == business_id]
+        return {
+            "business_id": business_id,
+            "date": date,
+            "count": len(orders),
+            "orders": [
+                {
+                    "order_id": o.order_id,
+                    "customer_id": o.customer_id,
+                    "date": o.date,
+                    "units": o.units,
+                    "status": o.status.value if hasattr(o.status, "value") else str(o.status),
+                    "order_type": o.order_type.value if hasattr(o.order_type, "value") else str(o.order_type),
+                    "unit_price": o.unit_price,
+                    "amount": o.amount,
+                    "created_at": o.created_at,
+                }
+                for o in orders
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/tiffin/orders")
+def create_tiffin_order(req: TiffinOrderCreateRequest):
+    try:
+        order = tiffin_service.create_order(
+            order_id=req.order_id,
+            customer_id=req.customer_id,
+            date=req.date,
+            units=req.units,
+            unit_price=req.unit_price,
+            order_type=OrderType.SUBSCRIPTION if req.order_type == "subscription" else OrderType.ONE_OFF,
+            business_id=req.business_id,
+        )
+        return {
+            "status": "success",
+            "order": {
+                "order_id": order.order_id,
+                "customer_id": order.customer_id,
+                "date": order.date,
+                "units": order.units,
+                "status": order.status.value if hasattr(order.status, "value") else str(order.status),
+                "amount": order.amount,
+            },
+        }
+    except CapacityExceededError as e:
+        raise HTTPException(status_code=409, detail=f"Capacity exceeded: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/tiffin/orders/{order_id}/cancel")
+def cancel_tiffin_order(order_id: str, business_id: str = Query("home_tiffin")):
+    try:
+        order = tiffin_service.cancel_order(order_id=order_id, business_id=business_id)
+        return {
+            "status": "cancelled",
+            "order_id": order.order_id,
+            "units": order.units,
+            "new_status": order.status.value if hasattr(order.status, "value") else str(order.status),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/tiffin/capacity")
+def get_tiffin_capacity(
+    date: str = Query(..., description="Target date in YYYY-MM-DD format"),
+    business_id: str = Query("home_tiffin"),
+):
+    try:
+        return tiffin_service.get_capacity_status(date=date, business_id=business_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/tiffin/inventory")
+def get_tiffin_inventory(business_id: str = Query("home_tiffin")):
+    try:
+        return tiffin_service.get_inventory_status(business_id=business_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/tiffin/evaluate")
+def evaluate_tiffin_opportunity(req: TiffinEvaluateRequest):
+    try:
+        return tiffin_service.evaluate_opportunity(
+            date=req.date,
+            additional_meals=req.additional_meals,
+            current_cash=req.current_cash,
+            min_cash_buffer=req.min_cash_buffer,
+            upcoming_obligations=req.upcoming_obligations,
+            business_id=req.business_id,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/state")

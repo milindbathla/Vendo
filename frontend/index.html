@@ -202,20 +202,165 @@
 <div class="toast" id="toast"><span class="dot"></span><span id="toastMsg"></span></div>
 
 <script>
-  // Onboarding form interactions.
+  // Onboarding form interactions & state hydration.
   const toast = document.getElementById('toast'), tmsg = document.getElementById('toastMsg');
   let tTimer;
-  function showToast(msg){ tmsg.textContent = msg; toast.classList.add('show');
-    clearTimeout(tTimer); tTimer = setTimeout(()=>toast.classList.remove('show'), 3200); }
+  function showToast(msg){
+    tmsg.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(tTimer);
+    tTimer = setTimeout(() => toast.classList.remove('show'), 3500);
+  }
 
-  document.querySelectorAll('.btn-connect').forEach(b=>{
-    b.addEventListener('click', ()=> showToast(`Connecting to ${b.dataset.provider}…`));
+  const connectedServices = new Set(['Amazon Pay', 'Zoho Books']);
+
+  // Handle Connect Accounts buttons
+  document.querySelectorAll('.btn-connect').forEach(b => {
+    const provider = b.dataset.provider;
+    b.addEventListener('click', () => {
+      if (connectedServices.has(provider)) {
+        connectedServices.delete(provider);
+        b.textContent = 'Connect';
+        b.style.background = '';
+        b.style.color = '';
+        showToast(`${provider} disconnected.`);
+      } else {
+        connectedServices.add(provider);
+        b.textContent = 'Connected ✓';
+        b.style.background = 'var(--accent-glow, rgba(46, 125, 50, 0.2))';
+        b.style.color = 'var(--accent, #4caf50)';
+        showToast(`${provider} connected successfully (simulated token granted).`);
+      }
+    });
   });
-  document.getElementById('setupForm').addEventListener('submit', e=>{
+
+  // Restore saved state on page load to prevent state loss on refresh
+  async function loadExistingProfile() {
+    try {
+      const savedBizId = localStorage.getItem('vendo_active_business_id');
+      const url = savedBizId ? `/api/onboarding/profile?business_id=${encodeURIComponent(savedBizId)}` : '/api/onboarding/profile';
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      const facts = data.facts || {};
+
+      if (data.display_name) document.getElementById('biz').value = data.display_name;
+      if (facts.owner_name) document.getElementById('owner').value = facts.owner_name;
+      if (facts.phone) document.getElementById('phone').value = facts.phone;
+      if (data.city) document.getElementById('city').value = data.city;
+      if (facts.locality) document.getElementById('locality').value = facts.locality;
+      if (facts.gstin) document.getElementById('gstin').value = facts.gstin;
+
+      if (facts.archetype_raw) {
+        document.getElementById('archetype').value = facts.archetype_raw;
+      } else if (data.category === 'home_tiffin') {
+        document.getElementById('archetype').value = 'Tiffin / cloud kitchen';
+      }
+
+      if (facts.min_cash_buffer !== undefined) document.getElementById('buffer').value = facts.min_cash_buffer;
+      if (facts.daily_capacity !== undefined) document.getElementById('maxout').value = facts.daily_capacity;
+      if (facts.order_cutoff) document.getElementById('cutoff').value = facts.order_cutoff;
+      if (facts.cooking_start) document.getElementById('cook').value = facts.cooking_start;
+      if (facts.open_time) document.getElementById('open').value = facts.open_time;
+      if (facts.close_time) document.getElementById('close').value = facts.close_time;
+      if (facts.weekly_day_off) document.getElementById('dayoff').value = facts.weekly_day_off;
+      if (facts.delivery_radius_km !== undefined) document.getElementById('radius').value = facts.delivery_radius_km;
+      if (facts.fast_delivery_fee !== undefined) document.getElementById('fastfee').value = facts.fast_delivery_fee;
+      if (facts.supplier_credit_days) document.getElementById('credit').value = facts.supplier_credit_days;
+      if (facts.busiest_time) document.getElementById('busiest').value = facts.busiest_time;
+      if (facts.language) document.getElementById('lang').value = facts.language;
+    } catch (e) {
+      // Backend may not have loaded profile yet, safe ignore
+    }
+  }
+
+  loadExistingProfile();
+
+  // Wire Onboarding Form Submission
+  const form = document.getElementById('setupForm');
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  form.addEventListener('submit', async e => {
     e.preventDefault();
-    showToast("Activating Alexa+ for your business…");
+
+    const bizName = document.getElementById('biz').value.trim();
+    const ownerName = document.getElementById('owner').value.trim();
+    const archetype = document.getElementById('archetype').value;
+
+    if (!bizName) {
+      showToast('Please enter your business name.');
+      document.getElementById('biz').focus();
+      return;
+    }
+    if (!ownerName) {
+      showToast('Please enter the owner name.');
+      document.getElementById('owner').focus();
+      return;
+    }
+    if (!archetype) {
+      showToast('Please select your type of business.');
+      document.getElementById('archetype').focus();
+      return;
+    }
+
+    const payload = {
+      business_name: bizName,
+      owner_name: ownerName,
+      archetype: archetype,
+      phone: document.getElementById('phone').value.trim() || null,
+      gstin: document.getElementById('gstin').value.trim() || null,
+      locality: document.getElementById('locality').value.trim() || null,
+      city: document.getElementById('city').value.trim() || null,
+      min_cash_buffer: parseFloat(document.getElementById('buffer').value) || 5000.0,
+      max_per_day: parseFloat(document.getElementById('maxout').value) || 40.0,
+      order_cutoff: document.getElementById('cutoff').value.trim() || null,
+      cooking_start: document.getElementById('cook').value.trim() || null,
+      open_time: document.getElementById('open').value.trim() || null,
+      close_time: document.getElementById('close').value.trim() || null,
+      weekly_day_off: document.getElementById('dayoff').value || null,
+      delivery_radius_km: document.getElementById('radius').value ? parseFloat(document.getElementById('radius').value) : null,
+      fast_delivery_fee: document.getElementById('fastfee').value ? parseFloat(document.getElementById('fastfee').value) : null,
+      supplier_credit_days: document.getElementById('credit').value.trim() || null,
+      busiest_time: document.getElementById('busiest').value || null,
+      language: document.getElementById('lang').value || null,
+      connected_services: Array.from(connectedServices),
+      business_id: localStorage.getItem('vendo_active_business_id') || null,
+    };
+
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Activating Alexa+...';
+
+    try {
+      const res = await fetch('/api/onboarding/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result.detail || 'Failed to save business profile.');
+      }
+
+      if (result.business_id) {
+        localStorage.setItem('vendo_active_business_id', result.business_id);
+      }
+
+      showToast(`Business '${result.display_name}' activated! Redirecting to Alexa+...`);
+      setTimeout(() => {
+        location.href = 'alexa.html';
+      }, 700);
+    } catch (err) {
+      showToast(err.message || 'Error connecting to backend server.');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalText;
+    }
   });
-  document.getElementById('previewLink').addEventListener('click', ()=> location.href = 'alexa.html');
+
+  document.getElementById('previewLink').addEventListener('click', () => {
+    location.href = 'alexa.html';
+  });
 </script>
 </body>
 </html>

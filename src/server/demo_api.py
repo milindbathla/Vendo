@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from src.db.connection import DEFAULT_DB_PATH
+from src.db.connection import DEFAULT_DB_PATH, CANONICAL_DEMO_DB_PATH
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["demo"])
@@ -165,17 +165,23 @@ def _count(d: Any) -> Optional[int]:
 
 # ── read-only db access ─────────────────────────────────────────────────────
 def _db_path() -> str:
+    path = os.environ.get("DEMO_DATABASE_PATH", CANONICAL_DEMO_DB_PATH)
+    if os.path.exists(path):
+        return path
     return os.environ.get("DATABASE_PATH", DEFAULT_DB_PATH)
 
 
 def q(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
-    uri = f"file:{_db_path()}?mode=ro"
-    conn = sqlite3.connect(uri, uri=True)
-    conn.row_factory = sqlite3.Row
     try:
-        return [dict(r) for r in conn.execute(sql, params).fetchall()]
-    finally:
-        conn.close()
+        uri = f"file:{_db_path()}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True)
+        conn.row_factory = sqlite3.Row
+        try:
+            return [dict(r) for r in conn.execute(sql, params).fetchall()]
+        finally:
+            conn.close()
+    except Exception:
+        return []
 
 
 def _one(sql: str, params: tuple = ()) -> Optional[Dict[str, Any]]:
@@ -195,9 +201,33 @@ def _llm_enabled() -> bool:
 
 
 # ── data builders (the demo.db source behind the MCP demo tools) ─────────────
-def build_business() -> Dict[str, Any]:
+def build_business(business_id: Optional[str] = None) -> Dict[str, Any]:
+    if business_id:
+        try:
+            from src.db.profile_repository import AdaptiveProfileRepository
+            repo = AdaptiveProfileRepository(_db_path())
+            prof = repo.get_profile(business_id)
+            if prof:
+                facts = {k: f.value for k, f in prof.facts.items()}
+                return {
+                    "business_id": prof.business_id,
+                    "business_name": prof.display_name,
+                    "name": prof.display_name,
+                    "category": prof.category,
+                    "city": prof.city or "Bengaluru",
+                    "state": prof.state or "Karnataka",
+                    "locality": facts.get("locality", "Central"),
+                    "owner_name": facts.get("owner_name", "Owner"),
+                    "daily_capacity": facts.get("daily_capacity", 40),
+                    "ai_enabled": _llm_enabled(),
+                }
+        except Exception:
+            pass
     b = _one("SELECT * FROM business_profile LIMIT 1") or {}
     b["ai_enabled"] = _llm_enabled()   # the assistant brain is online (provider not exposed)
+    arch = b.get("archetype", "home_tiffin")
+    b.setdefault("category", "home_tiffin" if "tiffin" in str(arch).lower() else arch)
+    b.setdefault("business_id", "home_tiffin")
     return b
 
 
@@ -312,6 +342,28 @@ _PANEL_TOOL = {
     "reviews": "get_customer_reviews", "overview": "get_business_overview",
 }
 
+# ── legacy demo endpoints (for backward compatibility) ──────────────────────
+@router.get("/demo/business")
+def demo_business(business_id: Optional[str] = None): return build_business(business_id)
+
+@router.get("/demo/accounts")
+def demo_accounts(): return build_accounts()
+
+@router.get("/demo/inventory")
+def demo_inventory(): return build_inventory()
+
+@router.get("/demo/invoices")
+def demo_invoices(): return build_invoices()
+
+@router.get("/demo/market")
+def demo_market(): return build_market()
+
+@router.get("/demo/reviews")
+def demo_reviews(): return build_reviews()
+
+@router.get("/demo/overview")
+def demo_overview(): return build_overview()
+
 _PANELS = [
     ("accounts", ("cash", "money", "balance", "afford", "spend", "pay", "due", "salary", "bill pay", "profit")),
     ("inventory", ("stock", "inventory", "low", "running", "reorder", "out of", "oil", "dal", "rice", "ingredient", "kitchen", "saaman", "samaan", "maal", "chahiye", "banane")),
@@ -337,7 +389,7 @@ async def _fetch_panel(panel: str) -> Tuple[Dict[str, Any], List[str]]:
 
 # ── endpoints (all panel data flows through the MCP server) ──────────────────
 @router.get("/panel/business")
-def panel_business(): return build_business()
+def panel_business(business_id: Optional[str] = None): return build_business(business_id)
 
 @router.get("/panel/accounts")
 async def panel_accounts(): return (await _fetch_panel("accounts"))[0]
@@ -380,6 +432,7 @@ async def mcp_tools() -> Dict[str, Any]:
 # ── chat (MCP for data, Claude for the spoken reply) ─────────────────────────
 class ChatIn(BaseModel):
     message: str
+    business_id: Optional[str] = None
 
 
 def _fallback_reply(panel: str, d: Dict[str, Any]) -> str:
@@ -498,7 +551,7 @@ def _classify_intent(message: str) -> str:
 @router.post("/chat")
 async def chat(body: ChatIn) -> Dict[str, Any]:
     panel = _classify_intent(body.message)
-    biz = build_business()
+    biz = build_business(body.business_id)
     data, mcp_tools = await _fetch_panel(panel)
     reply = _llm_reply(body.message, data, biz)
     if not reply:
