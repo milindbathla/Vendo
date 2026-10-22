@@ -782,7 +782,7 @@ class TaskRepository:
                 """
                 SELECT * FROM autopilot_action_proposals
                 WHERE business_id = ? AND requires_approval = 1 AND execution_status = 'PROPOSED'
-                ORDER BY created_at DESC
+                ORDER BY created_at ASC, action_id ASC
                 """,
                 (business_id,),
             ).fetchall()

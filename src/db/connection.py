@@ -46,7 +46,7 @@ DEFAULT_DB_PATH: str = os.environ.get(
 _PROFILES_JSON: Path = _PROJECT_ROOT / "data" / "business_profiles.json"
 
 # Current schema version – bump this integer when DDL changes.
-_CURRENT_SCHEMA_VERSION = 3
+_CURRENT_SCHEMA_VERSION = 5
 
 # ── DDL ────────────────────────────────────────────────────────────────────────
 _DDL_V1 = """
@@ -174,6 +174,48 @@ CREATE TABLE IF NOT EXISTS autopilot_business_facts (
 CREATE INDEX IF NOT EXISTS idx_business_facts_biz ON autopilot_business_facts(business_id);
 """
 
+_DDL_V4 = """
+-- Durable conversation sessions bound to authenticated identities and tenant boundaries
+CREATE TABLE IF NOT EXISTS autopilot_conversation_sessions (
+    session_id                  TEXT PRIMARY KEY,
+    business_id                 TEXT NOT NULL,
+    owner_id                    TEXT NOT NULL,
+    subject                     TEXT NOT NULL,
+    status                      TEXT NOT NULL DEFAULT 'ACTIVE',
+    created_at                  REAL NOT NULL,
+    last_activity_at            REAL NOT NULL,
+    expires_at                  REAL NOT NULL,
+    referenced_action_ids_json  TEXT NOT NULL DEFAULT '[]',
+    relevant_task_ids_json      TEXT NOT NULL DEFAULT '[]',
+    context_version             INTEGER NOT NULL DEFAULT 1,
+    turn_history_json           TEXT NOT NULL DEFAULT '[]',
+    metadata_json               TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_biz_owner ON autopilot_conversation_sessions(business_id, owner_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_status ON autopilot_conversation_sessions(expires_at, status);
+"""
+
+_DDL_V5 = """
+-- Secure OAuth 2.1 refresh token storage with token rotation, family tracking, and replay detection
+CREATE TABLE IF NOT EXISTS autopilot_oauth_refresh_tokens (
+    token_hash          TEXT PRIMARY KEY,
+    family_id           TEXT NOT NULL,
+    client_id           TEXT NOT NULL,
+    subject             TEXT NOT NULL,
+    business_ids_json   TEXT NOT NULL,
+    scopes_json         TEXT NOT NULL,
+    resource            TEXT,
+    created_at          REAL NOT NULL,
+    expires_at          REAL NOT NULL,
+    consumed_at         REAL,
+    is_revoked          INTEGER NOT NULL DEFAULT 0,
+    revocation_reason   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON autopilot_oauth_refresh_tokens(family_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_subject ON autopilot_oauth_refresh_tokens(subject);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON autopilot_oauth_refresh_tokens(expires_at, is_revoked);
+"""
+
 
 # ── Connection factory ─────────────────────────────────────────────────────────
 
@@ -240,6 +282,16 @@ def initialize_database(
         conn.execute(
             "INSERT OR IGNORE INTO autopilot_schema_migrations (version) VALUES (?)",
             (3,),
+        )
+        conn.executescript(_DDL_V4)
+        conn.execute(
+            "INSERT OR IGNORE INTO autopilot_schema_migrations (version) VALUES (?)",
+            (4,),
+        )
+        conn.executescript(_DDL_V5)
+        conn.execute(
+            "INSERT OR IGNORE INTO autopilot_schema_migrations (version) VALUES (?)",
+            (5,),
         )
         conn.commit()
         logger.info("Database schema initialised at %s (version %d)", db_path, _CURRENT_SCHEMA_VERSION)

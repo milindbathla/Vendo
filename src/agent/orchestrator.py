@@ -33,6 +33,14 @@ from src.db.task_repository import (
     TaskState,
 )
 from src.db.email_repository import EmailRepository
+from src.db.session_repository import (
+    SessionRepository,
+    SessionNotFoundError,
+    SessionExpiredError,
+    SessionRevokedError,
+    SessionAccessDeniedError,
+)
+from src.models.session import ConversationSession
 from src.decision.policy_engine import PermissionEngine, PolicyDecision
 from src.decision.action_dispatcher import ActionDispatcher, ExecutionReceipt
 from src.models.email import InboundEmail, EmailAddress
@@ -59,6 +67,7 @@ class AdaptiveBusinessOrchestrator:
         supervisor: Optional[Any] = None,
         action_dispatcher: Optional[ActionDispatcher] = None,
         policy_engine: Optional[PermissionEngine] = None,
+        session_repo: Optional[SessionRepository] = None,
     ):
         self.repo = repo
         self.approvals = approval_service or PurchaseApprovalService()
@@ -69,28 +78,157 @@ class AdaptiveBusinessOrchestrator:
         self.supervisor = supervisor
         self.action_dispatcher = action_dispatcher
         self.policy_engine = policy_engine or PermissionEngine()
+        self.session_repo = session_repo
         self._last_referenced_actions: Dict[str, List[ActionProposal]] = {}
+
+    def _get_active_proposals_for_context(
+        self,
+        business_id: str,
+        session_id: Optional[str] = None,
+    ) -> List[ActionProposal]:
+        """
+        Safely retrieves the current ordered list of action proposals for the context.
+        If session_id is provided and session_repo is connected, retrieves fresh proposals
+        from task_repo matching session.referenced_action_ids in exact ordered sequence.
+        Otherwise falls back to in-memory _last_referenced_actions or task_repo.list_pending_actions.
+        """
+        if session_id and self.session_repo and self.task_repo:
+            try:
+                sess = self.session_repo.get_session(session_id, business_id=business_id)
+                if sess and sess.referenced_action_ids:
+                    proposals = []
+                    for aid in sess.referenced_action_ids:
+                        act = self.task_repo.get_action(aid, business_id=business_id)
+                        if act and act.execution_status == "PROPOSED":
+                            proposals.append(act)
+                    if proposals:
+                        return proposals
+            except Exception as e:
+                logger.warning("Error fetching proposals from session %s: %s", session_id, e)
+
+        # Fallback to in-memory cache or task_repo
+        if self._last_referenced_actions.get(business_id):
+            return self._last_referenced_actions[business_id]
+        if self.task_repo:
+            return self.task_repo.list_pending_actions(business_id=business_id)
+        return []
 
     def handle_user_message(
         self,
-        message: str,
+        message: Optional[str] = None,
         business_id: Optional[str] = None,
         actor_id: Optional[str] = None,
+        user_message: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Primary entry point for user interaction. Dispatches to operational briefings,
         approval workflows, task management, onboarding, financial analysis,
         opportunity evaluation, or external scouts.
+        Maintains persistent multi-turn session state across process restarts when session_id is provided.
         """
-        msg_lower = message.lower()
+        effective_message = message if message is not None else (user_message or "")
+        msg_lower = effective_message.lower()
+
+        # Session validation & identity binding
+        session: Optional[ConversationSession] = None
+        if session_id and self.session_repo:
+            try:
+                session = self.session_repo.get_session(session_id)
+            except Exception as e:
+                return {"status": "ERROR", "error": f"Failed to retrieve session: {str(e)}"}
+
+            if not session:
+                return {
+                    "status": "SESSION_NOT_FOUND",
+                    "reply": f"Conversation session '{session_id}' was not found.",
+                    "voice_summary": "Your conversation session could not be found.",
+                }
+            if not session.is_active:
+                st = session.status if not session.is_expired else "EXPIRED"
+                return {
+                    "status": f"SESSION_{st}",
+                    "reply": f"Conversation session '{session_id}' has {st.lower()}.",
+                    "voice_summary": f"Your conversation session has {st.lower()}.",
+                }
+
+            # Enforce tenant binding
+            if business_id and session.business_id != business_id:
+                return {
+                    "status": "CROSS_TENANT_ACCESS_DENIED",
+                    "reply": f"Access denied: Session '{session_id}' belongs to business '{session.business_id}', not '{business_id}'.",
+                    "voice_summary": "Access denied: session belongs to another business.",
+                }
+            if not business_id:
+                business_id = session.business_id
+
+            # Enforce owner identity if actor_id provided
+            if actor_id and actor_id != session.owner_id and actor_id != session.subject:
+                if not self.policy_engine.is_authorized_owner(business_id, actor_id):
+                    return {
+                        "status": "UNAUTHORIZED_SESSION_ACCESS",
+                        "reply": f"Access denied: Actor '{actor_id}' is not authorized to access session '{session_id}'.",
+                        "voice_summary": "You are not authorized to access this session.",
+                    }
+
+            # Record user turn
+            session.add_turn(role="user", content=effective_message)
+        elif not session_id and self.session_repo and business_id:
+            try:
+                owner = actor_id or f"owner:{business_id}"
+                subj = actor_id or f"sub_{business_id}"
+                session = self.session_repo.create_session(
+                    business_id=business_id,
+                    owner_id=owner,
+                    subject=subj,
+                    metadata={"source": "conversational_query"},
+                )
+                session.add_turn(role="user", content=effective_message)
+            except Exception as e:
+                logger.warning("Could not auto-create conversation session: %s", e)
+
+        # Helper to attach session details and persist turns before return
+        def _finalize_response(result: Dict[str, Any]) -> Dict[str, Any]:
+            if session and self.session_repo:
+                try:
+                    # Update referenced action IDs if present in result
+                    if result.get("pending_approvals"):
+                        result_proposals = result["pending_approvals"]
+                        act_ids = [p["action_id"] if isinstance(p, dict) else p.action_id for p in result_proposals]
+                        session.set_referenced_actions(act_ids)
+                    elif result.get("approvals"):
+                        result_proposals = result["approvals"]
+                        act_ids = [p["action_id"] if isinstance(p, dict) else p.action_id for p in result_proposals]
+                        session.set_referenced_actions(act_ids)
+                    elif result.get("status") in ("APPROVED_AND_EXECUTED", "REJECTED", "APPROVED") and "action_id" in result:
+                        approved_id = result["action_id"]
+                        rem_ids = [aid for aid in session.referenced_action_ids if aid != approved_id]
+                        session.set_referenced_actions(rem_ids)
+                        session.metadata.pop("focused_action_id", None)
+                    elif result.get("proposal") and "action_id" in result:
+                        session.metadata["focused_action_id"] = result["action_id"]
+                        if not session.referenced_action_ids:
+                            session.set_referenced_actions([result["action_id"]])
+
+                    # Record assistant response turn
+                    resp_content = result.get("voice_summary") or result.get("reply") or ""
+                    session.add_turn(role="assistant", content=resp_content)
+                    self.session_repo.save_session(session)
+                    result["session_id"] = session.session_id
+                    result["session_context_version"] = session.context_version
+                except Exception as e:
+                    logger.warning("Error finalizing session in orchestrator: %s", e)
+            return result
 
         # 1. Resolve or create active profile
         profile = None
         if business_id:
             profile = self.repo.get_profile(business_id)
 
-        # 2. If profile exists, check for explicit operational/analytical requests first
-        if profile is not None:
+        target_biz = profile.business_id if profile else business_id
+
+        # 2. Check for explicit operational/analytical requests first
+        if target_biz is not None:
             # A. Operational Briefing / Attention / Focus
             if any(w in msg_lower for w in [
                 "what should i focus", "what needs my attention", "what needs attention",
@@ -98,67 +236,75 @@ class AdaptiveBusinessOrchestrator:
                 "operational briefing", "summary of today", "what's pending", "what is pending",
                 "focus on today", "focus on", "what should i do", "what appointments and preparations"
             ]):
-                return self.generate_daily_briefing(profile.business_id, actor_id=actor_id)
+                return _finalize_response(self.generate_daily_briefing(target_biz, actor_id=actor_id, session_id=session_id))
 
             # B. Pending Approvals List
             if any(w in msg_lower for w in [
                 "pending approval", "pending proposals", "needs approval", "show approvals",
-                "list approvals", "actions to approve", "proposals awaiting"
+                "list approvals", "actions to approve", "proposals awaiting", "which approvals"
             ]):
-                return self.list_pending_approvals_summary(profile.business_id)
+                return _finalize_response(self.list_pending_approvals_summary(target_biz, session_id=session_id))
 
             # C. Conversational multi-turn proposal explanation
             if any(w in msg_lower for w in [
-                "explain the first", "explain proposal", "details of proposal",
-                "tell me about proposal", "tell me more about", "explain that quote", "explain quote"
-            ]):
-                return self.handle_explain_proposal(profile.business_id, message)
+                "explain the first", "explain the second", "explain the third", "explain the",
+                "explain proposal", "details of proposal", "tell me about proposal",
+                "tell me more about", "explain that quote", "explain quote", "explain one",
+                "explain that", "explain this", "tell me about the first", "tell me about the second",
+                "tell me about the third"
+            ]) or (msg_lower.startswith("explain") and any(w in msg_lower for w in ["first", "second", "third", "one", "proposal", "quote", "1", "2", "3", "action"])):
+                return _finalize_response(self.handle_explain_proposal(target_biz, effective_message, session_id=session_id))
 
             # D. Conversational multi-turn approval
             if any(w in msg_lower for w in [
                 "approve it", "approve proposal", "approve the quotation", "confirm proposal",
-                "approve the quote", "execute proposal"
-            ]):
-                return self.handle_approve_followup(profile.business_id, message, actor_id=actor_id)
+                "approve the quote", "execute proposal", "approve the first", "approve the second",
+                "approve the third", "approve that", "approve this"
+            ]) or (msg_lower.startswith("approve") and any(w in msg_lower for w in ["first", "second", "third", "one", "proposal", "quote", "1", "2", "3", "action", "it", "that"])):
+                return _finalize_response(self.handle_approve_followup(target_biz, effective_message, actor_id=actor_id, session_id=session_id))
 
             # E. Conversational multi-turn rejection
             if any(w in msg_lower for w in [
-                "reject it", "reject proposal", "decline proposal", "reject the quotation"
-            ]):
-                return self.handle_reject_followup(profile.business_id, message, actor_id=actor_id)
+                "reject it", "reject proposal", "decline proposal", "reject the quotation",
+                "reject the first", "reject the second", "reject the third", "reject that",
+                "decline the quote", "decline it"
+            ]) or (msg_lower.startswith("reject") and any(w in msg_lower for w in ["first", "second", "third", "one", "proposal", "quote", "1", "2", "3", "action", "it", "that"])):
+                return _finalize_response(self.handle_reject_followup(target_biz, effective_message, actor_id=actor_id, session_id=session_id))
 
             # F. Inbound supplier quote / message processing
             if any(w in msg_lower for w in [
                 "supplier sent a quotation", "supplier quote", "quotation from",
                 "inbound email", "supplier quotation", "received an email from"
             ]):
-                return self.process_operational_request(profile.business_id, message, actor_id=actor_id)
+                return _finalize_response(self.process_operational_request(target_biz, effective_message, actor_id=actor_id, session_id=session_id))
 
             # G. Urgent operational tasks by domain
             if any(w in msg_lower for w in [
                 "supplier follow-up", "customer repair", "client appointment",
                 "upcoming work", "urgent task", "what is urgent", "what repairs need"
             ]):
-                return self.get_urgent_tasks_summary(profile.business_id)
+                return _finalize_response(self.get_urgent_tasks_summary(target_biz))
+
+        if profile is not None:
 
             # H. Profitability / Margin Inquiry
             if any(w in msg_lower for w in ["profit", "margin", "break-even", "breakeven", "how am i doing", "economics"]):
-                return self.analyze_profitability(profile)
+                return _finalize_response(self.analyze_profitability(profile))
 
             # I. Opportunity / New Orders / Job Evaluation
             if any(w in msg_lower for w in ["can i take", "more orders", "more jobs", "new client", "opportunity", "take on"]):
                 # Extract additional quantity requested
                 m = re.search(r"(\d+)\s*(?:more|additional)?\s*(?:orders|jobs|repairs|clients|customers|units|dresses|items|meals|tiffins|bikes)?", msg_lower)
                 additional_qty = float(m.group(1)) if m else 5.0
-                return self.evaluate_opportunity(profile, additional_qty, user_question=message)
+                return _finalize_response(self.evaluate_opportunity(profile, additional_qty, user_question=effective_message))
 
             # J. Competitor Scout Inquiry
             if any(w in msg_lower for w in ["competitor", "nearby", "competition", "other shops", "places nearby"]):
-                return self.scout_competitors(profile)
+                return _finalize_response(self.scout_competitors(profile))
 
             # K. Accounting & Invoice Inquiry
             if any(w in msg_lower for w in ["zoho", "invoice", "bills", "receivable", "accounting"]):
-                return self.get_accounting_status(profile)
+                return _finalize_response(self.get_accounting_status(profile))
 
         # 3. Check if intent is onboarding / fact update / profile answer
         onboarding_signals = [
@@ -171,8 +317,8 @@ class AdaptiveBusinessOrchestrator:
         ]
         probe_onboarder = AdaptiveBusinessOnboarder(profile=profile)
         has_extracted_facts = bool(
-            probe_onboarder._extract_numeric_facts(message)
-            or probe_onboarder._extract_products(message)
+            probe_onboarder._extract_numeric_facts(effective_message)
+            or probe_onboarder._extract_products(effective_message)
         )
         is_correction = any(w in msg_lower for w in [
             "actually", "correction", "change that to", "not", "update my", "instead of",
@@ -195,10 +341,10 @@ class AdaptiveBusinessOrchestrator:
                 profile=profile,
                 business_id_hint=business_id if (profile is None and business_id) else None,
             )
-            result = onboarder.process_utterance(message)
+            result = onboarder.process_utterance(effective_message)
             # Persist updated profile
             self.repo.save_profile(onboarder.profile)
-            return {
+            return _finalize_response({
                 "intent": "onboarding",
                 "business_id": onboarder.profile.business_id,
                 "display_name": onboarder.profile.display_name,
@@ -209,10 +355,10 @@ class AdaptiveBusinessOrchestrator:
                 "extracted_facts": result["extracted_facts"],
                 "corrections": result["corrections"],
                 "onboarding_completed": onboarder.profile.onboarding_completed,
-            }
+            })
 
         # E. General Business State Summary
-        return self.get_business_summary(profile)
+        return _finalize_response(self.get_business_summary(profile))
 
     def _get_unit_label(self, category: str) -> str:
         """Returns domain-appropriate unit label."""
@@ -669,6 +815,7 @@ class AdaptiveBusinessOrchestrator:
         self,
         business_id: str,
         actor_id: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generates an adaptive, domain-aware operational briefing for the business owner.
@@ -686,6 +833,13 @@ class AdaptiveBusinessOrchestrator:
             tasks = self.task_repo.list_tasks(business_id=business_id, limit=20)
             pending_actions = self.task_repo.list_pending_actions(business_id=business_id)
             self._last_referenced_actions[business_id] = list(pending_actions)
+            if session_id and self.session_repo and pending_actions:
+                try:
+                    self.session_repo.update_referenced_actions(
+                        session_id, [p.action_id for p in pending_actions], business_id=business_id
+                    )
+                except Exception as e:
+                    logger.warning("Could not update session referenced actions: %s", e)
 
         # Prioritize tasks
         prioritized_tasks = []
@@ -792,12 +946,23 @@ class AdaptiveBusinessOrchestrator:
             "reply": "\n".join(reply_lines),
         }
 
-    def list_pending_approvals_summary(self, business_id: str) -> Dict[str, Any]:
+    def list_pending_approvals_summary(
+        self,
+        business_id: str,
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Lists pending action proposals for a business with clear voice formatting."""
         if not self.task_repo:
             return {"status": "ERROR", "error": "Task repository not connected."}
         pending = self.task_repo.list_pending_actions(business_id=business_id)
         self._last_referenced_actions[business_id] = list(pending)
+        if session_id and self.session_repo and pending:
+            try:
+                self.session_repo.update_referenced_actions(
+                    session_id, [p.action_id for p in pending], business_id=business_id
+                )
+            except Exception as e:
+                logger.warning("Could not update session referenced actions: %s", e)
 
         if not pending:
             return {
@@ -828,6 +993,7 @@ class AdaptiveBusinessOrchestrator:
         business_id: str,
         message: str,
         pending: List[ActionProposal],
+        session_id: Optional[str] = None,
     ) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
         """
         Safely resolves a conversational ordinal reference ('proposal 1', 'first one', 'second', 'number 2')
@@ -872,11 +1038,23 @@ class AdaptiveBusinessOrchestrator:
                         "voice_summary": f"That proposal reference is out of range. There are only {len(pending)} pending proposals.",
                     }
 
-        # 3. If exactly 1 proposal exists, generic confirmation/inquiry unambiguously refers to it
+        # 3. If a specific proposal was focused in the session, and message is generic confirmation/approval ("approve it", "approve that", "approve this", "yes", "confirm")
+        if session_id and self.session_repo:
+            try:
+                active_session = self.session_repo.get_session(session_id)
+                focused_id = active_session.metadata.get("focused_action_id") if active_session else None
+                if focused_id:
+                    for idx, p in enumerate(pending):
+                        if p.action_id == focused_id:
+                            return idx, None
+            except Exception:
+                pass
+
+        # 4. If exactly 1 proposal exists, generic confirmation/inquiry unambiguously refers to it
         if len(pending) == 1:
             return 0, None
 
-        # 4. If multiple proposals exist and no specific ordinal was supplied, reject as ambiguous
+        # 5. If multiple proposals exist and no specific ordinal was supplied, reject as ambiguous
         descriptions = [f"{i+1}) {p.description}" for i, p in enumerate(pending[:3])]
         return None, {
             "status": "AMBIGUOUS_REFERENCE",
@@ -888,12 +1066,17 @@ class AdaptiveBusinessOrchestrator:
             "voice_summary": f"You have {len(pending)} pending approvals. Please specify which proposal number to approve.",
         }
 
-    def handle_explain_proposal(self, business_id: str, message: str) -> Dict[str, Any]:
+    def handle_explain_proposal(
+        self,
+        business_id: str,
+        message: str,
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Explains an action proposal referenced conversationally (e.g. 'explain the first one')."""
         if not self.task_repo:
             return {"status": "ERROR", "error": "Task repository not connected."}
 
-        pending = self._last_referenced_actions.get(business_id) or self.task_repo.list_pending_actions(business_id=business_id)
+        pending = self._get_active_proposals_for_context(business_id, session_id=session_id)
         if not pending:
             return {
                 "status": "NO_PENDING_APPROVALS",
@@ -901,7 +1084,7 @@ class AdaptiveBusinessOrchestrator:
                 "voice_summary": "You have no pending proposals to review.",
             }
 
-        target_idx, err_resp = self._resolve_proposal_index(business_id, message, pending)
+        target_idx, err_resp = self._resolve_proposal_index(business_id, message, pending, session_id=session_id)
         if err_resp:
             return err_resp
 
@@ -925,6 +1108,17 @@ class AdaptiveBusinessOrchestrator:
             f"Would you like me to approve it?"
         )
 
+        # Retain full pending proposal list for ordinal numbering, but set focused proposal in session metadata
+        self._last_referenced_actions[business_id] = pending
+        if session_id and self.session_repo:
+            try:
+                sess = self.session_repo.get_session(session_id)
+                if sess:
+                    sess.metadata["focused_action_id"] = proposal.action_id
+                    self.session_repo.save_session(sess)
+            except Exception as e:
+                logger.warning("Could not set session focused action: %s", e)
+
         return {
             "status": "SUCCESS",
             "action_id": proposal.action_id,
@@ -938,12 +1132,13 @@ class AdaptiveBusinessOrchestrator:
         business_id: str,
         message: str,
         actor_id: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Approves and optionally dispatches an action proposal referenced conversationally."""
         if not self.task_repo:
             return {"status": "ERROR", "error": "Task repository not connected."}
 
-        pending = self._last_referenced_actions.get(business_id) or self.task_repo.list_pending_actions(business_id=business_id)
+        pending = self._get_active_proposals_for_context(business_id, session_id=session_id)
         if not pending:
             return {
                 "status": "NO_PENDING_APPROVALS",
@@ -960,7 +1155,7 @@ class AdaptiveBusinessOrchestrator:
                 "reply": f"Approval denied: Actor `{effective_actor}` lacks owner authorization for `{business_id}`.",
             }
 
-        target_idx, err_resp = self._resolve_proposal_index(business_id, message, pending)
+        target_idx, err_resp = self._resolve_proposal_index(business_id, message, pending, session_id=session_id)
         if err_resp:
             return err_resp
 
@@ -995,8 +1190,16 @@ class AdaptiveBusinessOrchestrator:
                 execution_payload=proposal.payload,
             )
 
-        # Update cache
-        self._last_referenced_actions[business_id] = [p for p in pending if p.action_id != proposal.action_id]
+        # Update cache & session
+        rem_props = [p for p in pending if p.action_id != proposal.action_id]
+        self._last_referenced_actions[business_id] = rem_props
+        if session_id and self.session_repo:
+            try:
+                self.session_repo.update_referenced_actions(
+                    session_id, [p.action_id for p in rem_props], business_id=business_id
+                )
+            except Exception as e:
+                logger.warning("Could not update session referenced actions: %s", e)
 
         reply_lines = [
             f"**Action Approved and Dispatched** (Simulation Mode):",
@@ -1021,12 +1224,13 @@ class AdaptiveBusinessOrchestrator:
         business_id: str,
         message: str,
         actor_id: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Rejects an action proposal referenced conversationally."""
         if not self.task_repo:
             return {"status": "ERROR", "error": "Task repository not connected."}
 
-        pending = self._last_referenced_actions.get(business_id) or self.task_repo.list_pending_actions(business_id=business_id)
+        pending = self._get_active_proposals_for_context(business_id, session_id=session_id)
         if not pending:
             return {
                 "status": "NO_PENDING_APPROVALS",
@@ -1043,7 +1247,7 @@ class AdaptiveBusinessOrchestrator:
                 "reply": f"Rejection denied: Unauthorized actor `{effective_actor}`.",
             }
 
-        target_idx, err_resp = self._resolve_proposal_index(business_id, message, pending)
+        target_idx, err_resp = self._resolve_proposal_index(business_id, message, pending, session_id=session_id)
         if err_resp:
             return err_resp
 
@@ -1065,7 +1269,15 @@ class AdaptiveBusinessOrchestrator:
             actor_id=effective_actor,
             rejection_reason="Rejected by business owner during operational review.",
         )
-        self._last_referenced_actions[business_id] = [p for p in pending if p.action_id != proposal.action_id]
+        rem_props = [p for p in pending if p.action_id != proposal.action_id]
+        self._last_referenced_actions[business_id] = rem_props
+        if session_id and self.session_repo:
+            try:
+                self.session_repo.update_referenced_actions(
+                    session_id, [p.action_id for p in rem_props], business_id=business_id
+                )
+            except Exception as e:
+                logger.warning("Could not update session referenced actions: %s", e)
 
         voice = f"The proposed action '{proposal.description}' has been rejected."
         return {
@@ -1083,6 +1295,7 @@ class AdaptiveBusinessOrchestrator:
         sender: Optional[str] = None,
         subject: Optional[str] = None,
         actor_id: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Processes an inbound operational text or quotation email through the supervisor pipeline.
@@ -1110,6 +1323,13 @@ class AdaptiveBusinessOrchestrator:
         if self.task_repo:
             pending = self.task_repo.list_pending_actions(business_id=business_id)
             self._last_referenced_actions[business_id] = list(pending)
+            if session_id and self.session_repo and pending:
+                try:
+                    self.session_repo.update_referenced_actions(
+                        session_id, [p.action_id for p in pending], business_id=business_id
+                    )
+                except Exception as e:
+                    logger.warning("Could not update session referenced actions: %s", e)
 
         reply_lines = [
             f"**Operational Request Processed** for `{business_id}`:",
