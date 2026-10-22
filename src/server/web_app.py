@@ -25,15 +25,43 @@ import json
 import os
 from typing import Dict, Any, List, Optional
 
-from fastapi import FastAPI, HTTPException, Header, Depends, Query
-from pydantic import BaseModel, Field
+from contextlib import asynccontextmanager
+import urllib.parse
+from fastapi import FastAPI, HTTPException, Header, Depends, Query, Request, Form
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field, model_validator
 
 from src.db.connection import DEFAULT_DB_PATH, initialize_database, seed_business_state
 from src.db.state_repository import BusinessStateRepository
 from src.db.profile_repository import AdaptiveProfileRepository
+from src.db.session_repository import SessionRepository
 from src.agent.orchestrator import AdaptiveBusinessOrchestrator
 from src.models.adaptive_profile import FactStatus, FactSource
 from src.server.mcp_server import create_mcp_server
+from src.server.mcp_auth import MCPAuthenticationMiddleware
+from src.security.auth_service import (
+    create_access_token,
+    verify_access_token,
+    issue_authorization_code,
+    exchange_authorization_code,
+    refresh_access_token,
+    revoke_oauth_token,
+    check_business_authorization,
+    AuthenticationError,
+    TokenExpiredError,
+    InvalidCredentialsError,
+    ScopeInsufficientError,
+    JWT_ISSUER,
+    JWT_AUDIENCE,
+)
+from src.security.oauth_config import (
+    get_public_base_url,
+    get_mcp_resource_url,
+    get_auth_issuer_url,
+    is_valid_client_redirect,
+    ConfigurationError,
+)
+from src.models.principal import TrustedPrincipal
 from src.decision.approval_service import (
     PurchaseApprovalService,
     PlanStatus,
@@ -93,9 +121,10 @@ places_adapter      = GooglePlacesAdapter()
 zoho_adapter        = ZohoBooksAdapter()
 adaptive_repo       = AdaptiveProfileRepository(_DB_PATH)
 
-# Phase 4 services
+# Phase 4 & Sessions services
 task_repo           = TaskRepository(_DB_PATH)
 email_repo          = EmailRepository(_DB_PATH)
+session_repo        = SessionRepository(_DB_PATH)
 policy_engine       = PermissionEngine()
 action_dispatcher   = ActionDispatcher(task_repo=task_repo, policy_engine=policy_engine)
 supervisor          = EmailOperationalSupervisor(
@@ -116,6 +145,7 @@ orchestrator        = AdaptiveBusinessOrchestrator(
     supervisor=supervisor,
     action_dispatcher=action_dispatcher,
     policy_engine=policy_engine,
+    session_repo=session_repo,
 )
 amazon_pay_adapter = AmazonPayAdapter()
 meta_adapter       = MetaAdapter()
@@ -132,18 +162,28 @@ mcp_server = create_mcp_server(
     policy_engine=policy_engine,
     action_dispatcher=action_dispatcher,
     supervisor=supervisor,
+    session_repo=session_repo,
 )
 
+mcp_app = mcp_server.streamable_http_app()
+streamable_endpoint = mcp_app.routes[0].endpoint
 
-# Initialize FastAPI application
+@asynccontextmanager
+async def app_lifespan(app: FastAPI):
+    # Initializes StreamableHTTPManager task group for official FastMCP transport
+    async with mcp_app.router.lifespan_context(mcp_app):
+        yield
+
+# Initialize FastAPI application with unified lifespan
 app = FastAPI(
     title="Alexa Business Autopilot",
     description="Voice-first operating layer & MCP server for Indian small businesses",
     version="1.0.0",
+    lifespan=app_lifespan,
 )
 
-# Mount MCP endpoints (Streamable HTTP & SSE)
-app.mount("/mcp", mcp_server.streamable_http_app())
+# Mount authenticated MCP endpoints (Streamable HTTP & SSE)
+app.mount("/mcp", MCPAuthenticationMiddleware(streamable_endpoint))
 app.mount("/sse", mcp_server.sse_app())
 
 # Mount OAuth connection management routes
@@ -497,12 +537,18 @@ def get_business_profile_endpoint(business_id: str):
 def update_business_fact_endpoint(
     business_id: str,
     req: FactUpdateRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
     x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
 ):
     """Explicitly corrects or updates a specific business fact with owner authorization."""
-    actor_id = resolve_actor_id(req.actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
-    enforce_owner_authorization(business_id, actor_id)
+    principal = resolve_principal(
+        authorization=authorization,
+        body_actor_id=req.actor_id,
+        x_autopilot_actor_id=x_autopilot_actor_id,
+        x_autopilot_owner_id=x_autopilot_owner_id,
+    )
+    enforce_owner_authorization(business_id, principal)
 
     profile = adaptive_repo.get_profile(business_id)
     if not profile:
@@ -512,7 +558,7 @@ def update_business_fact_endpoint(
         value=req.value,
         status=FactStatus(req.status.lower() if isinstance(req.status, str) else req.status),
         source=FactSource.USER_STATED,
-        notes=req.notes or f"Updated by owner {actor_id}",
+        notes=req.notes or f"Updated by owner {principal.subject}",
     )
     adaptive_repo.save_profile(profile)
     return {"status": "SUCCESS", "fact": fact.to_dict()}
@@ -522,12 +568,18 @@ def update_business_fact_endpoint(
 def delete_business_profile_endpoint(
     business_id: str,
     actor_id: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
     x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
 ):
     """Deletes an adaptive business profile with owner authorization."""
-    actor = resolve_actor_id(actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
-    enforce_owner_authorization(business_id, actor)
+    principal = resolve_principal(
+        authorization=authorization,
+        query_actor_id=actor_id,
+        x_autopilot_actor_id=x_autopilot_actor_id,
+        x_autopilot_owner_id=x_autopilot_owner_id,
+    )
+    enforce_owner_authorization(business_id, principal)
 
     success = adaptive_repo.delete_profile(business_id)
     if not success:
@@ -593,27 +645,101 @@ class FactVerifyRequest(BaseModel):
     actor_id: Optional[str] = None
 
 
-def resolve_actor_id(
+def resolve_principal(
+    authorization: Optional[str] = None,
     body_actor_id: Optional[str] = None,
     x_autopilot_actor_id: Optional[str] = None,
     x_autopilot_owner_id: Optional[str] = None,
-) -> str:
+    query_actor_id: Optional[str] = None,
+) -> TrustedPrincipal:
+    """
+    Resolves the server-verified TrustedPrincipal:
+    1. If Authorization header with Bearer token is provided: verifies JWT signature, issuer, audience, exp.
+       If invalid/expired, immediately raises HTTP 401 with RFC 6750 WWW-Authenticate header.
+    2. If no Bearer token:
+       In production (AUTOPILOT_ENV=production): raises HTTP 401 with WWW-Authenticate header.
+       In development mode: accepts mock developer headers (X-Autopilot-Actor-Id, etc.) or actor_id.
+    """
     env = os.environ.get("AUTOPILOT_ENV", "development").lower()
+
+    if authorization and authorization.strip():
+        auth_clean = authorization.strip()
+        if not auth_clean.lower().startswith("bearer "):
+            raise HTTPException(
+                status_code=401,
+                detail="Authorization header must use Bearer scheme.",
+                headers={"WWW-Authenticate": 'Bearer error="invalid_request"'},
+            )
+        try:
+            return verify_access_token(auth_clean)
+        except TokenExpiredError as e:
+            raise HTTPException(
+                status_code=401,
+                detail="Bearer token has expired.",
+                headers={"WWW-Authenticate": 'Bearer error="invalid_token", error_description="The access token expired"'},
+            )
+        except AuthenticationError as e:
+            raise HTTPException(
+                status_code=401,
+                detail=str(e),
+                headers={"WWW-Authenticate": f'Bearer error="invalid_token", error_description="{str(e)}"'},
+            )
+
     if env == "production":
         raise HTTPException(
-            status_code=403,
+            status_code=401,
             detail="Header-based simulated authentication is strictly disabled in production mode. Verified OAuth2/JWT authentication required.",
+            headers={"WWW-Authenticate": 'Bearer realm="vendo-api", error="unauthorized", error_description="Bearer token required"'},
         )
-    actor = body_actor_id or x_autopilot_actor_id or x_autopilot_owner_id
+
+    actor = body_actor_id or x_autopilot_actor_id or x_autopilot_owner_id or query_actor_id
     if not actor or not actor.strip():
         raise HTTPException(
             status_code=401,
             detail="Authentication required: No actor or owner identity provided in request or headers.",
+            headers={"WWW-Authenticate": 'Bearer realm="vendo-api"'},
         )
-    return actor.strip()
+
+    actor_clean = actor.strip()
+    return TrustedPrincipal(
+        subject=actor_clean,
+        issuer="vendo-dev",
+        audience="vendo-api",
+        is_authenticated=True,
+        business_membership=["*"],
+        roles=["owner"],
+        scopes=["*"],
+        auth_method="dev_mock",
+    )
 
 
-def enforce_owner_authorization(business_id: str, actor_id: str) -> None:
+def resolve_actor_id(
+    body_actor_id: Optional[str] = None,
+    x_autopilot_actor_id: Optional[str] = None,
+    x_autopilot_owner_id: Optional[str] = None,
+    query_actor_id: Optional[str] = None,
+    authorization: Optional[str] = None,
+) -> str:
+    principal = resolve_principal(
+        authorization=authorization,
+        body_actor_id=body_actor_id,
+        x_autopilot_actor_id=x_autopilot_actor_id,
+        x_autopilot_owner_id=x_autopilot_owner_id,
+        query_actor_id=query_actor_id,
+    )
+    return principal.subject
+
+
+def enforce_owner_authorization(business_id: str, actor_or_principal: Any) -> None:
+    if isinstance(actor_or_principal, TrustedPrincipal):
+        if not check_business_authorization(actor_or_principal, business_id, policy_engine):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Principal '{actor_or_principal.subject}' is not an authorized owner for business '{business_id}'. Consequential operations forbidden.",
+            )
+        return
+
+    actor_id = str(actor_or_principal)
     if not policy_engine.is_authorized_owner(business_id, actor_id):
         raise HTTPException(
             status_code=403,
@@ -724,14 +850,20 @@ def get_action_proposal_endpoint(action_id: str, business_id: str = Query(...)):
 def approve_action_endpoint(
     action_id: str,
     req: ActionApproveRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
     x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
 ):
     """
     Approves an action proposal. Enforces authenticated owner verification and exact payload hash match.
     """
-    actor_id = resolve_actor_id(req.actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
-    enforce_owner_authorization(req.business_id, actor_id)
+    principal = resolve_principal(
+        authorization=authorization,
+        body_actor_id=req.actor_id,
+        x_autopilot_actor_id=x_autopilot_actor_id,
+        x_autopilot_owner_id=x_autopilot_owner_id,
+    )
+    enforce_owner_authorization(req.business_id, principal)
 
     proposal = task_repo.get_action(action_id, business_id=req.business_id)
     if not proposal:
@@ -742,7 +874,7 @@ def approve_action_endpoint(
         approved = task_repo.approve_action(
             action_id=action_id,
             business_id=req.business_id,
-            actor_id=actor_id,
+            actor_id=principal.subject,
             execution_payload=payload,
             policy_engine=policy_engine,
         )
@@ -759,18 +891,24 @@ def approve_action_endpoint(
 def reject_action_endpoint(
     action_id: str,
     req: ActionRejectRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
     x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
 ):
     """Rejects an action proposal with documented rationale."""
-    actor_id = resolve_actor_id(req.actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
-    enforce_owner_authorization(req.business_id, actor_id)
+    principal = resolve_principal(
+        authorization=authorization,
+        body_actor_id=req.actor_id,
+        x_autopilot_actor_id=x_autopilot_actor_id,
+        x_autopilot_owner_id=x_autopilot_owner_id,
+    )
+    enforce_owner_authorization(req.business_id, principal)
 
     try:
         rejected = task_repo.reject_action(
             action_id=action_id,
             business_id=req.business_id,
-            actor_id=actor_id,
+            actor_id=principal.subject,
             rejection_reason=req.rejection_reason,
         )
         return {"status": "REJECTED", "action": rejected.to_dict()}
@@ -784,6 +922,7 @@ def reject_action_endpoint(
 def dispatch_action_endpoint(
     action_id: str,
     req: ActionDispatchRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
     x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
 ):
@@ -791,12 +930,17 @@ def dispatch_action_endpoint(
     Executes an action through the controlled ActionDispatcher.
     Re-evaluates policy, validates hash binding, enforces idempotency.
     """
-    actor_id = resolve_actor_id(req.actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
+    principal = resolve_principal(
+        authorization=authorization,
+        body_actor_id=req.actor_id,
+        x_autopilot_actor_id=x_autopilot_actor_id,
+        x_autopilot_owner_id=x_autopilot_owner_id,
+    )
     try:
         receipt = action_dispatcher.dispatch_action(
             action_id=action_id,
             business_id=req.business_id,
-            actor_id=actor_id,
+            actor_id=principal.subject,
             execution_payload=req.execution_payload,
         )
         return {"status": receipt.status, "receipt": asdict(receipt)}
@@ -834,18 +978,24 @@ def list_executions_endpoint(
 def reconcile_execution_endpoint(
     action_id: str,
     req: ExecutionReconcileRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
     x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
 ):
     """Explicit owner-directed reconciliation for an action in EXECUTION_UNCERTAIN."""
-    actor_id = resolve_actor_id(req.actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
-    enforce_owner_authorization(req.business_id, actor_id)
+    principal = resolve_principal(
+        authorization=authorization,
+        body_actor_id=req.actor_id,
+        x_autopilot_actor_id=x_autopilot_actor_id,
+        x_autopilot_owner_id=x_autopilot_owner_id,
+    )
+    enforce_owner_authorization(req.business_id, principal)
 
     try:
         receipt = action_dispatcher.reconcile_uncertain_action(
             action_id=action_id,
             business_id=req.business_id,
-            actor_id=actor_id,
+            actor_id=principal.subject,
             resolution=req.resolution,
             notes=req.notes,
         )
@@ -881,12 +1031,18 @@ def onboard_document_endpoint(req: DocumentOnboardRequest):
 @app.post("/api/documents/verify-fact")
 def verify_fact_endpoint(
     req: FactVerifyRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
     x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
 ):
     """Owner verification of a candidate, assumed, or outdated fact."""
-    actor_id = resolve_actor_id(req.actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
-    enforce_owner_authorization(req.business_id, actor_id)
+    principal = resolve_principal(
+        authorization=authorization,
+        body_actor_id=req.actor_id,
+        x_autopilot_actor_id=x_autopilot_actor_id,
+        x_autopilot_owner_id=x_autopilot_owner_id,
+    )
+    enforce_owner_authorization(req.business_id, principal)
 
     profile = adaptive_repo.get_profile(req.business_id)
     if not profile:
@@ -904,7 +1060,7 @@ def verify_fact_endpoint(
         value=val,
         status=fact_status,
         source=FactSource.USER_STATED,
-        notes=req.notes or f"Verified by owner {actor_id}",
+        notes=req.notes or f"Verified by owner {principal.subject}",
     )
     adaptive_repo.save_profile(profile)
     return {"status": "SUCCESS", "fact": updated_fact.to_dict()}
@@ -912,25 +1068,47 @@ def verify_fact_endpoint(
 
 class OrchestratorQueryRequest(BaseModel):
     business_id: str
-    message: str
+    message: Optional[str] = None
+    query: Optional[str] = None
     actor_id: Optional[str] = None
+    session_id: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_message(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("message") and data.get("query"):
+                data["message"] = data["query"]
+            elif not data.get("message") and not data.get("query"):
+                data["message"] = ""
+        return data
 
 
 @app.post("/api/orchestrator/query")
 def orchestrator_query_endpoint(
     req: OrchestratorQueryRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
     x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
 ):
     """
     Central operational assistant endpoint.
     Processes natural-language queries, briefings, follow-ups, and operational requests.
+    Enforces server-verified principal and strict tenant isolation.
     """
-    actor_id = resolve_actor_id(req.actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
+    principal = resolve_principal(
+        authorization=authorization,
+        body_actor_id=req.actor_id,
+        x_autopilot_actor_id=x_autopilot_actor_id,
+        x_autopilot_owner_id=x_autopilot_owner_id,
+    )
+    enforce_owner_authorization(req.business_id, principal)
+
     return orchestrator.handle_user_message(
         message=req.message,
         business_id=req.business_id,
-        actor_id=actor_id,
+        actor_id=principal.subject,
+        session_id=req.session_id,
     )
 
 
@@ -938,14 +1116,263 @@ def orchestrator_query_endpoint(
 def orchestrator_briefing_endpoint(
     business_id: str = Query(...),
     actor_id: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     x_autopilot_actor_id: Optional[str] = Header(None, alias="X-Autopilot-Actor-Id"),
     x_autopilot_owner_id: Optional[str] = Header(None, alias="X-Autopilot-Owner-Id"),
 ):
     """
     Returns a proactive daily operational briefing and voice-friendly summary.
+    Enforces verified owner identity.
     """
-    actor = resolve_actor_id(actor_id, x_autopilot_actor_id, x_autopilot_owner_id)
-    return orchestrator.generate_daily_briefing(business_id=business_id, actor_id=actor)
+    principal = resolve_principal(
+        authorization=authorization,
+        query_actor_id=actor_id,
+        x_autopilot_actor_id=x_autopilot_actor_id,
+        x_autopilot_owner_id=x_autopilot_owner_id,
+    )
+    enforce_owner_authorization(business_id, principal)
+    return orchestrator.generate_daily_briefing(business_id=business_id, actor_id=principal.subject)
+
+
+# -----------------------------------------------------------------------------
+# OAuth 2.1 & RFC 8414 / RFC 9728 / RFC 9207 Metadata & Account Linking Endpoints
+# -----------------------------------------------------------------------------
+@app.get("/.well-known/oauth-authorization-server")
+def oauth_authorization_server_metadata(request: Request):
+    """RFC 8414 OAuth 2.0 Authorization Server Metadata."""
+    base_url = get_public_base_url()
+    issuer_url = get_auth_issuer_url()
+    return {
+        "issuer": issuer_url,
+        "authorization_endpoint": f"{base_url}/oauth/authorize",
+        "token_endpoint": f"{base_url}/oauth/token",
+        "revocation_endpoint": f"{base_url}/oauth/revoke",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
+        "scopes_supported": [
+            "business:read",
+            "business:write",
+            "approvals:read",
+            "approvals:execute",
+            "tasks:read",
+            "tasks:write",
+        ],
+        "authorization_response_iss_parameter_supported": True,
+    }
+
+
+@app.get("/.well-known/oauth-protected-resource")
+def oauth_protected_resource_metadata(request: Request):
+    """RFC 9728 OAuth 2.0 Protected Resource Metadata."""
+    resource_url = get_mcp_resource_url()
+    issuer_url = get_auth_issuer_url()
+    return {
+        "resource": resource_url,
+        "authorization_servers": [issuer_url],
+        "scopes_supported": [
+            "business:read",
+            "business:write",
+            "approvals:read",
+            "approvals:execute",
+            "tasks:read",
+            "tasks:write",
+        ],
+        "bearer_methods_supported": ["header"],
+    }
+
+
+@app.get("/oauth/authorize")
+def oauth_authorize_endpoint(
+    client_id: str = Query(...),
+    redirect_uri: str = Query(...),
+    response_type: str = Query("code"),
+    code_challenge: str = Query(...),
+    code_challenge_method: str = Query("S256"),
+    state: Optional[str] = Query(None),
+    scope: Optional[str] = Query("business:read business:write approvals:read approvals:execute"),
+    resource: Optional[str] = Query(None),
+    owner_id: Optional[str] = Query("owner_sharma"),
+    business_id: Optional[str] = Query("biz_kirana"),
+):
+    """
+    OAuth 2.1 Authorization Code grant endpoint with PKCE (RFC 7636).
+    Enforces redirect_uri registration to prevent open redirects.
+    Includes RFC 9207 authorization server issuer identification parameter (iss).
+    """
+    if response_type != "code":
+        raise HTTPException(status_code=400, detail="Unsupported response_type. Only 'code' is supported.")
+    if code_challenge_method.upper() != "S256":
+        raise HTTPException(status_code=400, detail="Only PKCE code_challenge_method 'S256' is supported.")
+
+    if not is_valid_client_redirect(client_id, redirect_uri):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Redirect URI '{redirect_uri}' is not allowlisted for registered client '{client_id}'.",
+        )
+
+    env = os.environ.get("AUTOPILOT_ENV", "development").lower()
+    if env == "production" and (not owner_id or owner_id == "owner_sharma"):
+        raise HTTPException(
+            status_code=403,
+            detail="Production authorization code issuance requires a verified authenticated business owner session.",
+        )
+
+    granted_scopes = scope.split() if scope else ["business:read", "approvals:read", "approvals:execute"]
+    try:
+        code = issue_authorization_code(
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            subject=owner_id or "owner_sharma",
+            business_ids=[business_id] if business_id else ["biz_kirana"],
+            scopes=granted_scopes,
+            code_challenge=code_challenge,
+            code_challenge_method="S256",
+            resource=resource,
+        )
+    except InvalidCredentialsError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    query_params = {
+        "code": code,
+        "iss": get_auth_issuer_url(),  # RFC 9207 Issuer Identification
+    }
+    if state:
+        query_params["state"] = state
+    redirect_url = f"{redirect_uri}?{urllib.parse.urlencode(query_params)}"
+    return RedirectResponse(url=redirect_url, status_code=302)
+
+
+class TokenExchangeRequest(BaseModel):
+    grant_type: str = "authorization_code"
+    code: Optional[str] = None
+    redirect_uri: Optional[str] = None
+    client_id: str
+    code_verifier: Optional[str] = None
+    refresh_token: Optional[str] = None
+    scope: Optional[str] = None
+    resource: Optional[str] = None
+
+
+@app.post("/oauth/token")
+async def oauth_token_endpoint(request: Request):
+    """
+    OAuth 2.1 token endpoint supporting:
+    1. grant_type=authorization_code (exchanges code + PKCE verifier for access token and refresh token)
+    2. grant_type=refresh_token (rotates refresh token, detects replay, and issues fresh access token)
+    Accepts both standard form-encoded (application/x-www-form-urlencoded) and JSON bodies.
+    """
+    content_type = request.headers.get("content-type", "")
+    data = {}
+    if "application/json" in content_type:
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+    else:
+        try:
+            form = await request.form()
+            data = dict(form)
+        except Exception:
+            data = {}
+
+    eff_grant_type = data.get("grant_type")
+    eff_client_id = data.get("client_id")
+
+    if not eff_client_id:
+        raise HTTPException(status_code=400, detail="Missing required client_id parameter")
+
+    if eff_grant_type == "authorization_code":
+        eff_code = data.get("code")
+        eff_redirect_uri = data.get("redirect_uri")
+        eff_verifier = data.get("code_verifier")
+        eff_resource = data.get("resource")
+
+        if not eff_code or not eff_redirect_uri or not eff_verifier:
+            raise HTTPException(status_code=400, detail="Missing required OAuth 2.1 token exchange parameters")
+
+        try:
+            return exchange_authorization_code(
+                code=eff_code,
+                client_id=eff_client_id,
+                redirect_uri=eff_redirect_uri,
+                code_verifier=eff_verifier,
+                resource=eff_resource,
+                db_path=_DB_PATH,
+            )
+        except InvalidCredentialsError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=str(e),
+                headers={"WWW-Authenticate": 'Bearer error="invalid_grant"'},
+            )
+
+    elif eff_grant_type == "refresh_token":
+        eff_refresh_token = data.get("refresh_token")
+        eff_scope = data.get("scope")
+
+        if not eff_refresh_token:
+            raise HTTPException(status_code=400, detail="Missing required refresh_token parameter")
+
+        requested_scopes = eff_scope.split() if eff_scope else None
+
+        try:
+            return refresh_access_token(
+                refresh_token=eff_refresh_token,
+                client_id=eff_client_id,
+                requested_scopes=requested_scopes,
+                policy_engine=policy_engine,
+                db_path=_DB_PATH,
+            )
+        except TokenExpiredError as e:
+            raise HTTPException(
+                status_code=400,
+                detail="Refresh token has expired",
+                headers={"WWW-Authenticate": 'Bearer error="invalid_grant", error_description="The refresh token expired"'},
+            )
+        except (InvalidCredentialsError, ScopeInsufficientError) as e:
+            raise HTTPException(
+                status_code=400,
+                detail=str(e),
+                headers={"WWW-Authenticate": 'Bearer error="invalid_grant"'},
+            )
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported grant_type '{eff_grant_type}'. Supported grant types: 'authorization_code', 'refresh_token'.",
+        )
+
+
+@app.post("/oauth/revoke")
+async def oauth_revoke_endpoint(request: Request):
+    """
+    RFC 7009 Token Revocation Endpoint.
+    Revokes either an access token or a refresh token.
+    """
+    content_type = request.headers.get("content-type", "")
+    data = {}
+    if "application/json" in content_type:
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+    else:
+        try:
+            form = await request.form()
+            data = dict(form)
+        except Exception:
+            data = {}
+
+    token = data.get("token")
+    token_type_hint = data.get("token_type_hint")
+
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing required 'token' parameter to revoke.")
+
+    revoke_oauth_token(token=token, token_type_hint=token_type_hint, db_path=_DB_PATH)
+    return {"status": "SUCCESS", "revoked": True}
 
 
 @app.get("/")
@@ -957,6 +1384,12 @@ def root():
         "mode": "backend_only",
         "mcp_enabled": True,
         "mcp_endpoints": ["/mcp", "/sse"],
+        "oauth_discovery": [
+            "/.well-known/oauth-authorization-server",
+            "/.well-known/oauth-protected-resource",
+            "/oauth/authorize",
+            "/oauth/token",
+        ],
         "adaptive_endpoints": [
             "/api/onboarding/chat",
             "/api/business/profiles",

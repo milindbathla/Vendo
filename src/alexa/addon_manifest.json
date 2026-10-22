@@ -1,0 +1,108 @@
+{
+  "$schema": "https://developer.amazon.com/schemas/alexaplus/addon-manifest-v1.json",
+  "_comment": "PLANNING & SUBMISSION TEMPLATE: Production URLs are dynamically driven by VENDO_PUBLIC_BASE_URL and VENDO_MCP_RESOURCE_URL. Live submission requires team-supplied privacy policy, terms of service, and Amazon Developer Console Client ID.",
+  "addon_id": "vendo-business-autopilot",
+  "version": "1.0.0",
+  "type": "MCP_TOOLKIT_ADDON",
+  "category": "BUSINESS_AND_FINANCE",
+  "publisher": {
+    "name": "Vendo Technologies",
+    "support_email": "support@vendo.app",
+    "privacy_policy_url": "REQUIRED_EXTERNAL_ASSET: Must be supplied by team before console submission",
+    "terms_of_service_url": "REQUIRED_EXTERNAL_ASSET: Must be supplied by team before console submission"
+  },
+  "locales": {
+    "en-IN": {
+      "display_name": "Vendo Business Autopilot",
+      "summary": "Autonomous AI operating and decision layer for Indian SMBs and micro-enterprises.",
+      "description": "Vendo empowers business owners across retail, services, catering, manufacturing, and distribution to run their operations seamlessly via voice. Manage daily briefings, supplier quotes, inventory risks, approvals, and profitability without complex dashboards.",
+      "example_utterances": [
+        "Alexa, what's happening in my business today?",
+        "Alexa, which approvals need my attention?",
+        "Alexa, explain the second proposal.",
+        "Alexa, approve that proposal."
+      ],
+      "keywords": [
+        "business",
+        "autopilot",
+        "kirana",
+        "retail",
+        "approvals",
+        "purchase order",
+        "tiffin",
+        "profitability"
+      ]
+    },
+    "en-US": {
+      "display_name": "Vendo Business Autopilot",
+      "summary": "Autonomous operational decision layer and business autopilot.",
+      "description": "Autonomous AI assistant for SMB operations: daily briefings, order opportunities, supplier quotes, cash-reserve enforcement, and multi-turn conversational approvals.",
+      "example_utterances": [
+        "Alexa, ask Vendo for my morning business briefing.",
+        "Alexa, ask Vendo which approvals are waiting.",
+        "Alexa, ask Vendo to explain the first quote.",
+        "Alexa, ask Vendo to confirm the order."
+      ],
+      "keywords": [
+        "business",
+        "operations",
+        "approvals",
+        "orders",
+        "inventory"
+      ]
+    }
+  },
+  "mcp_server": {
+    "protocol_version": "2024-11-05",
+    "transport": {
+      "type": "STREAMABLE_HTTP",
+      "endpoint_url_template": "https://${VENDO_DEPLOYED_DOMAIN}/mcp",
+      "latency_target_ms": 500
+    },
+    "authentication": {
+      "type": "OAUTH2_BEARER",
+      "authorization_server_metadata_url_template": "https://${VENDO_DEPLOYED_DOMAIN}/.well-known/oauth-authorization-server",
+      "protected_resource_metadata_url_template": "https://${VENDO_DEPLOYED_DOMAIN}/.well-known/oauth-protected-resource",
+      "rfc_specifications": {
+        "authorization_server_metadata": "RFC 8414",
+        "protected_resource_metadata": "RFC 9728",
+        "issuer_identification": "RFC 9207",
+        "pkce": "RFC 7636"
+      }
+    }
+  },
+  "account_linking": {
+    "enabled": true,
+    "flow": "AUTHORIZATION_CODE",
+    "pkce_required": true,
+    "code_challenge_methods": [
+      "S256"
+    ],
+    "authorization_endpoint_template": "https://${VENDO_DEPLOYED_DOMAIN}/oauth/authorize",
+    "token_endpoint_template": "https://${VENDO_DEPLOYED_DOMAIN}/oauth/token",
+    "revocation_endpoint_template": "https://${VENDO_DEPLOYED_DOMAIN}/oauth/revoke",
+    "scopes_supported": [
+      "business:read",
+      "business:write",
+      "approvals:read",
+      "approvals:execute",
+      "tasks:read",
+      "tasks:write"
+    ],
+    "default_scopes": [
+      "business:read",
+      "approvals:read",
+      "approvals:execute"
+    ],
+    "client_id_placeholder": "ALEXA_MCP_CLIENT_ID_CONFIGURED_IN_CONSOLE"
+  },
+  "high_value_voice_tools": [
+    "generate_daily_briefing",
+    "list_pending_approvals",
+    "explain_action_proposal",
+    "approve_proposal_followup",
+    "get_urgent_operational_tasks",
+    "analyze_business_profitability",
+    "evaluate_order_opportunity"
+  ]
+}

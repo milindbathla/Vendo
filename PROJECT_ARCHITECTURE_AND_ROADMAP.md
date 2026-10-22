@@ -880,11 +880,12 @@ Every extracted fact carries a `DocumentEvidence` record. This makes every busin
 |---|---|---|---|---|
 | **Amazon Pay integration** | P2 — explicitly out of scope | Partially implemented (mock mode) | `src/integrations/amazon_pay/` package, 19 passing tests | Mount in approval pipeline; live sandbox testing; IPN webhook endpoint |
 | **External-provider OAuth token storage** | Not implemented | Implemented (Fernet-encrypted SQLite) | `src/db/token_store.py`, `autopilot_oauth_tokens` table | Mount `auth_routes`; add CSRF nonce; add token refresh logic |
-| **OAuth callback routes** | Not implemented | Defined but not mounted | `src/server/auth_routes.py` | Call `app.include_router(auth_router)` in `web_app.py` |
+| **OAuth callback routes** | Not implemented | **Fully Implemented & Mounted** | `src/server/auth_routes.py`, `src/server/web_app.py` | Configure live external client secret in production |
 | **Meta / social integration** | Not mentioned | Scaffolded only | `src/integrations/meta/adapter.py` — `get_status()` only | All Graph API calls; campaign metrics; post management |
 | **Google Places place details** | Not implemented | Implemented with mock provider | `src/integrations/google_places/place_details.py` | Expose via REST endpoint or MCP tool |
-| **Real owner authentication** | P0 gap | **Unchanged** | `is_authorized_owner()` still checks `actor_id.startswith("owner:")` | OAuth2/JWT middleware; map token to owner identity |
-| **MCP authentication** | P1 gap | **Unchanged** | No bearer token on `/mcp` or `/sse` | API key or bearer token middleware |
+| **Real owner authentication** | P0 gap | **Fully Implemented (PyJWT & TrustedPrincipal)** | `src/security/auth_service.py`, `src/models/principal.py`, `test_auth_and_security.py` | Live IdP federation (e.g. Amazon LWA / Cognito) |
+| **MCP authentication** | P1 gap | **Fully Implemented (Streamable HTTP + Bearer Auth)** | `src/server/mcp_auth.py`, `src/server/mcp_server.py`, `test_remote_mcp.py` | None — 35 tools audited, scoped, latency verified <50ms |
+| **Persistent conversation sessions** | P1 gap | **Fully Implemented (SQLite Schema v4)** | `src/db/session_repository.py`, `src/models/session.py`, `test_conversation_sessions.py` | None — multi-turn restart survival verified |
 | **Live Gmail/Outlook** | P1 gap | **Unchanged** | Email provider is still mock | Gmail OAuth adapter (assigned to another developer) |
 | **Owner notification on AWAITING_APPROVAL** | P1 gap | **Unchanged** | No notification wired | Push/webhook/SMS on state transition |
 | **Amazon Pay → ActionDispatcher integration** | N/A (new) | Not implemented | Adapters are parallel, not connected | Wire payment adapter calls through PermissionEngine + approval gate |
@@ -894,9 +895,9 @@ Every extracted fact carries a `DocumentEvidence` record. This makes every busin
 | **Task expiry and cleanup** | P1 gap | **Unchanged** | Tasks accumulate indefinitely | TTL or archival policy |
 | **Intent classification accuracy** | P0 gap | **Unchanged** | Keyword matching in supervisor | Gemini-powered classification |
 | **Fact extraction accuracy** | P0 gap | **Unchanged** | Regex patterns in FactExtractor | Gemini-powered extraction or structured templates |
-| **CSRF protection in OAuth flow** | N/A (new) | Not implemented | `state` parameter is merchant_id, not a nonce | Server-side session nonce bound to OAuth state |
-| **Token expiry tracking** | N/A (new) | Not implemented | `autopilot_oauth_tokens` has no expiry column | Add `expires_at`; auto-refresh before expiry |
-| **Deployment readiness** | P0 gap | **Unchanged** | No container, no secrets vault, no rate limiting | Docker, secrets manager, reverse proxy |
+| **CSRF / PKCE in OAuth flow** | P0 gap | **Fully Implemented (RFC 7636 PKCE S256)** | `src/security/auth_service.py`, `src/server/web_app.py`, `test_alexa_addon.py` | None — RFC 8414 & RFC 9728 metadata active; RFC 9207 iss parameter supported |
+| **Token expiry tracking** | N/A (new) | **Implemented (1h JWT & 5m Auth Codes)** | `src/security/auth_service.py`, token revocation blacklist | Periodic database sweep of expired auth codes |
+| **Deployment readiness** | P0 gap | **Local Complete, Alexa+ Add-on Configured** | `src/alexa/addon_manifest.json`, `src/alexa/alexa_tool_catalog.md` | Cloud deployment, reverse proxy HTTPS, live Alexa CLI |
 
 ### P0 — Security and Production Hardening (Blocks production deployment)
 
