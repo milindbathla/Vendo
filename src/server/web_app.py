@@ -150,9 +150,13 @@ app.mount("/sse", mcp_server.sse_app())
 from src.server.auth_routes import router as auth_router
 app.include_router(auth_router)
 
-# Mount frontend demo API (read-only demo.db + Gemini-backed chat) and the SPA
+# Mount frontend demo API (MCP-backed demo.db + Zoho + Claude-backed chat) and the SPA
+from src.server import demo_api
 from src.server.demo_api import router as demo_router
 app.include_router(demo_router)
+# Share the *mounted* MCP server so every frontend data fetch goes through MCP
+# and registers the additive demo tools (demo_get_accounts, …) on it.
+demo_api.set_mcp_server(mcp_server)
 
 from pathlib import Path as _Path
 from fastapi.staticfiles import StaticFiles

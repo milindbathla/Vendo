@@ -65,3 +65,6 @@ data/chroma/
 # to repo-wide data/demo.db). Their -wal/-shm sidecars remain ignored above.
 !data/demo.db
 !data/business.db
+
+# stray env file (belt-and-suspenders)
+/env

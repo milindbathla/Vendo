@@ -166,6 +166,10 @@ button{font-family:inherit;cursor:pointer}
 .sim__top .ctx .biz small{color:#cbb4bd;font-size:.78rem}
 .sim__top .ctx .mode{font-family:var(--font-mono);font-size:.72rem;color:var(--amber-hi);
   border:1px solid rgba(231,178,74,.4);border-radius:999px;padding:5px 11px;white-space:nowrap}
+.sim__top .ctx .mcp-chip{font-family:var(--font-mono);font-size:.72rem;font-weight:700;color:var(--plum-deep);
+  background:var(--amber-hi);border-radius:999px;padding:5px 11px;white-space:nowrap;letter-spacing:.02em;
+  transition:background .25s,box-shadow .25s}
+.sim__top .ctx .mcp-chip.flash{background:#fff;box-shadow:0 0 0 4px rgba(243,205,116,.45)}
 
 .sim__body{display:grid;grid-template-columns:minmax(360px,42fr) 58fr;flex:1;min-height:0}
 

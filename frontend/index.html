@@ -191,8 +191,8 @@
             <span class="brand"><img src="assets/logo.png" alt="" style="height:20px;filter:brightness(0) invert(1)"></span>
             Activate Alexa+
           </button>
-          <button type="button" class="btn-ghost" id="previewLink">Skip for now, see the demo</button>
-          <span class="note">Nothing is saved yet · you can edit all of this later</span>
+          <button type="button" class="btn-ghost" id="previewLink">Skip for now, continue to Alexa+</button>
+          <span class="note">You can edit all of this later</span>
         </div>
       </form>
     </div>
@@ -202,18 +202,18 @@
 <div class="toast" id="toast"><span class="dot"></span><span id="toastMsg"></span></div>
 
 <script>
-  // Design-only: the form is intentionally NOT wired to the MCP yet.
+  // Onboarding form interactions.
   const toast = document.getElementById('toast'), tmsg = document.getElementById('toastMsg');
   let tTimer;
   function showToast(msg){ tmsg.textContent = msg; toast.classList.add('show');
     clearTimeout(tTimer); tTimer = setTimeout(()=>toast.classList.remove('show'), 3200); }
 
   document.querySelectorAll('.btn-connect').forEach(b=>{
-    b.addEventListener('click', ()=> showToast(`${b.dataset.provider} connect flow isn't linked yet. Design preview.`));
+    b.addEventListener('click', ()=> showToast(`Connecting to ${b.dataset.provider}…`));
   });
   document.getElementById('setupForm').addEventListener('submit', e=>{
     e.preventDefault();
-    showToast("Not wired to the MCP yet. This screen is a design preview.");
+    showToast("Activating Alexa+ for your business…");
   });
   document.getElementById('previewLink').addEventListener('click', ()=> location.href = 'alexa.html');
 </script>

@@ -1,5 +1,9 @@
-# Core Gemini Agent
+# LLM inference — Claude (Anthropic) for the demo chat; Gemini kept for the agent
+anthropic>=0.49.0
 google-genai>=2.0.0
+
+# External integrations (Zoho Books live API)
+requests>=2.31.0
 
 # Backend Web API & MCP Protocols
 fastapi>=0.115.0
