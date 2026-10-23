@@ -4,7 +4,6 @@
 [![FastAPI](https://img.shields.io/badge/Framework-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![Model Context Protocol](https://img.shields.io/badge/Protocol-MCP%20FastMCP-orange.svg)](https://modelcontextprotocol.io/)
 [![Amazon Alexa+](https://img.shields.io/badge/Integration-Amazon%20Alexa%2B-232F3E.svg)](https://developer.amazon.com/alexa)
-[![Tests Passing](https://img.shields.io/badge/Tests-455%20Passed%2C%203%20Skipped-success.svg)](#testing-and-verification)
 
 > **Autonomous Operating & Decision Layer for Indian Micro & Small Enterprises (MSMEs)**
 > Built for the **Amazon Alexa+ Developer Hackathon**.
