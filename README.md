@@ -436,8 +436,7 @@ To ensure full transparency during hackathon evaluation:
 
 ## 18. Authors & Project Context
 
-- **Developer:** Milind Bathla
+- **Developer:** Milind Bathla, Aditi Mishra, Saigourav Sahoo, Avika Ananta, Preet Sethiya, Parth Gupta, Amarnath Parashar
 - **Project Name:** Vendo — Your Shop. On Autopilot.
-- **Hackathon:** Amazon Alexa+ Developer Hackathon
 - **Submission Repository:** [https://github.com/milindbathla/Vendo](https://github.com/milindbathla/Vendo)
-- **License:** MIT License (or hackathon submission terms).
+- **License:** MIT License
